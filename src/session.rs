@@ -472,16 +472,25 @@ fn run_with_sink_internal(
                     };
                     if status.state == SessionState::Running {
                         record_eligible_range(&mut eligible_ranges, &chunk);
-                        if !segmentation_replay_required
-                            && !enqueue_for_segmentation(
+                        if !segmentation_replay_required {
+                            match enqueue_for_segmentation(
                                 &segmentation_sender,
                                 chunk.clone(),
                                 &max_segmentation_queue_depth,
-                            )?
-                        {
-                            segmentation_replay_required = true;
-                            status.segmentation_replay_required = true;
-                            status.asr_replay_required = true;
+                            ) {
+                                EnqueueOutcome::Enqueued => {}
+                                EnqueueOutcome::Full => {
+                                    segmentation_replay_required = true;
+                                    status.segmentation_replay_required = true;
+                                    status.asr_replay_required = true;
+                                }
+                                EnqueueOutcome::Closed => {
+                                    segmentation_worker_ended_early = true;
+                                    segment_drain = false;
+                                    source_shutdown.store(true, Ordering::Relaxed);
+                                    break;
+                                }
+                            }
                         }
                     }
                     update_status_for_chunk(&mut status, &chunk);
@@ -561,16 +570,23 @@ fn run_with_sink_internal(
             };
             if segment_drain {
                 record_eligible_range(&mut eligible_ranges, &chunk);
-                if !segmentation_replay_required
-                    && !enqueue_for_segmentation(
+                if !segmentation_replay_required {
+                    match enqueue_for_segmentation(
                         &segmentation_sender,
                         chunk.clone(),
                         &max_segmentation_queue_depth,
-                    )?
-                {
-                    segmentation_replay_required = true;
-                    status.segmentation_replay_required = true;
-                    status.asr_replay_required = true;
+                    ) {
+                        EnqueueOutcome::Enqueued => {}
+                        EnqueueOutcome::Full => {
+                            segmentation_replay_required = true;
+                            status.segmentation_replay_required = true;
+                            status.asr_replay_required = true;
+                        }
+                        EnqueueOutcome::Closed => {
+                            segmentation_worker_ended_early = true;
+                            segment_drain = false;
+                        }
+                    }
                 }
             }
             update_status_for_chunk(&mut status, &chunk);
@@ -581,18 +597,16 @@ fn run_with_sink_internal(
             // When replay is required, `ShutdownDiscard` flushes and drops the
             // partial result: replay re-segments the same audio, so emitting the
             // live partial here would transcribe an overlapping range twice.
+            // A failed send means the worker already exited; the join below
+            // returns its real error, so do not mask it with a send error.
             if !segmentation_replay_required {
-                segmentation_sender
-                    .send(SegmentationCommand::Flush)
-                    .map_err(|_| Error::SegmentationWorkerPanicked)?;
+                let _ = segmentation_sender.send(SegmentationCommand::Flush);
             }
-            segmentation_sender
-                .send(if segmentation_replay_required {
-                    SegmentationCommand::ShutdownDiscard
-                } else {
-                    SegmentationCommand::ShutdownAndEmit
-                })
-                .map_err(|_| Error::SegmentationWorkerPanicked)?;
+            let _ = segmentation_sender.send(if segmentation_replay_required {
+                SegmentationCommand::ShutdownDiscard
+            } else {
+                SegmentationCommand::ShutdownAndEmit
+            });
         }
         drop(segmentation_sender);
 
@@ -770,6 +784,12 @@ enum SegmentationCommand {
     ShutdownDiscard,
 }
 
+enum EnqueueOutcome {
+    Enqueued,
+    Full,
+    Closed,
+}
+
 fn run_segmentation_worker(
     mut segmenter: Segmenter,
     receiver: crossbeam_channel::Receiver<SegmentationCommand>,
@@ -816,14 +836,16 @@ fn enqueue_for_segmentation(
     sender: &crossbeam_channel::Sender<SegmentationCommand>,
     chunk: PcmChunk,
     max_queue_depth: &AtomicUsize,
-) -> Result<bool> {
+) -> EnqueueOutcome {
     match sender.try_send(SegmentationCommand::Chunk(chunk)) {
         Ok(()) => {
             max_queue_depth.fetch_max(sender.len(), Ordering::Relaxed);
-            Ok(true)
+            EnqueueOutcome::Enqueued
         }
-        Err(TrySendError::Full(_)) => Ok(false),
-        Err(TrySendError::Disconnected(_)) => Err(Error::SegmentationWorkerPanicked),
+        Err(TrySendError::Full(_)) => EnqueueOutcome::Full,
+        // A closed channel means the worker already exited, possibly with the
+        // real inference error. Stop enqueueing and let the join report it.
+        Err(TrySendError::Disconnected(_)) => EnqueueOutcome::Closed,
     }
 }
 
@@ -1107,12 +1129,17 @@ impl RunnerGuard {
 
 #[cfg(test)]
 mod tests {
-    use super::{SilenceWatcher, best_effort_identity, validate_language};
+    use super::{
+        EnqueueOutcome, SilenceWatcher, best_effort_identity, enqueue_for_segmentation,
+        validate_language,
+    };
     use crate::Error;
     use crate::domain::{
         AudioSourceKind, PcmChunk, TARGET_CHANNELS, TARGET_SAMPLE_RATE_HZ, TimestampUs,
     };
+    use crossbeam_channel::bounded;
     use std::path::Path;
+    use std::sync::atomic::AtomicUsize;
     use std::time::Duration;
 
     #[test]
@@ -1162,6 +1189,18 @@ mod tests {
             assert!(!watcher.push(&chunk(index, 0.0)));
         }
         assert!(watcher.push(&chunk(27, 0.0)));
+    }
+
+    #[test]
+    fn enqueue_reports_a_closed_worker_without_masking_its_error() {
+        let (sender, receiver) = bounded(1);
+        drop(receiver);
+        let max_queue_depth = AtomicUsize::new(0);
+
+        assert!(matches!(
+            enqueue_for_segmentation(&sender, chunk(0, 0.5), &max_queue_depth),
+            EnqueueOutcome::Closed
+        ));
     }
 
     fn chunk(index: u64, level: f32) -> PcmChunk {
