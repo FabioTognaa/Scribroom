@@ -32,6 +32,9 @@ pub fn run(options: TranscribeOptions) -> Result<()> {
     crate::validation::validate_directory_target(&options.sessions_dir, "sessions directory")?;
     crate::validation::validate_existing_file(&options.input, "input audio")?;
     crate::validation::validate_existing_file(&options.model, "model")?;
+    // Create the output root before the (possibly long) transcription, so an
+    // unwritable target fails now instead of after hours of work.
+    std::fs::create_dir_all(&options.sessions_dir)?;
 
     let started_at_unix_ms = crate::storage::unix_time_ms()?;
     let mut engine = WhisperEngine::load(&options.model, &options.inference)?;
@@ -49,9 +52,8 @@ pub fn run(options: TranscribeOptions) -> Result<()> {
     )?;
     progress.finish();
 
-    // The directory is allocated only once the transcript is in hand, so a failure
-    // above leaves nothing behind.
-    std::fs::create_dir_all(&options.sessions_dir)?;
+    // The session directory is allocated only once the transcript is in hand,
+    // so a failure above leaves no partial output behind.
     let directory = crate::storage::create_session_directory(
         &options.sessions_dir,
         started_at_unix_ms,

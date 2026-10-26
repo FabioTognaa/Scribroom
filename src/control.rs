@@ -62,7 +62,7 @@ pub fn status_report(sessions_dir: &Path) -> Result<StatusReport> {
 
 pub fn request(sessions_dir: &Path, action: ControlAction) -> Result<SessionStatus> {
     let deadline = Instant::now() + CONTROL_TIMEOUT;
-    let _control_lock = acquire_control_lock(sessions_dir, deadline)?;
+    let control_lock = acquire_control_lock(sessions_dir, deadline)?;
     let (_, paths) = current_session(sessions_dir)?;
     let status: SessionStatus = read_json(&paths.status)?;
 
@@ -70,7 +70,12 @@ pub fn request(sessions_dir: &Path, action: ControlAction) -> Result<SessionStat
         (ControlAction::Stop, SessionState::Completed)
         | (ControlAction::Pause, SessionState::TranscriptionPaused)
         | (ControlAction::Resume, SessionState::Running) => return Ok(status),
-        (ControlAction::Stop, SessionState::Stopping) => return wait_for_completed(&paths),
+        // The stop was already acknowledged; waiting for completion does not
+        // need the control lock and must not block a second command.
+        (ControlAction::Stop, SessionState::Stopping) => {
+            drop(control_lock);
+            return wait_for_completed(&paths);
+        }
         (ControlAction::Pause, SessionState::Running)
         | (ControlAction::Resume, SessionState::TranscriptionPaused)
         | (ControlAction::Stop, SessionState::Running | SessionState::TranscriptionPaused) => {}
@@ -105,6 +110,10 @@ pub fn request(sessions_dir: &Path, action: ControlAction) -> Result<SessionStat
         let updated: SessionStatus = read_json(&paths.status)?;
         if updated.applied_control_generation >= generation {
             if action == ControlAction::Stop {
+                // The request is applied; release the lock while the session
+                // finishes so another stop/pause cannot time out on a phantom
+                // busy lock.
+                drop(control_lock);
                 return wait_for_completed(&paths);
             }
             if control_action_satisfied(action, updated.state) {

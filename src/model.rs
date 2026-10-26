@@ -45,17 +45,6 @@ impl ModelPreset {
         }
     }
 
-    /// CLI-facing name, matching the `ValueEnum` kebab-case value.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Small => "small",
-            Self::Medium => "medium",
-            Self::LargeV3Turbo => "large-v3-turbo",
-            Self::LargeV3 => "large-v3",
-        }
-    }
-
     /// Path where the preset is looked up by default.
     #[must_use]
     pub fn default_path(self) -> PathBuf {

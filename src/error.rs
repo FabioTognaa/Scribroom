@@ -48,9 +48,6 @@ pub enum Error {
     #[error("unsupported audio input: {0}")]
     UnsupportedAudio(String),
 
-    #[error("refusing to overwrite existing file: {}", .0.display())]
-    OutputExists(PathBuf),
-
     #[error("invalid segmenter configuration: {0}")]
     InvalidSegmenterConfig(String),
 

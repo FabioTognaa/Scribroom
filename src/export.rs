@@ -63,7 +63,7 @@ pub fn export_session(
             metadata.state
         )));
     }
-    let segments = read_segments(&transcript, metadata.session_id)?;
+    let segments = read_segments(&transcript, metadata.session_id, allow_partial)?;
     let rendered = render(&segments, format)?;
 
     if let Some(output) = output {
@@ -76,20 +76,43 @@ pub fn export_session(
     }
 }
 
-fn read_segments(path: &Path, expected_session_id: Uuid) -> Result<Vec<TranscriptSegment>> {
+fn read_segments(
+    path: &Path,
+    expected_session_id: Uuid,
+    allow_partial: bool,
+) -> Result<Vec<TranscriptSegment>> {
     let file = File::open(path)?;
     let mut segments = Vec::new();
     let mut previous_start = TimestampUs(0);
+    let mut lines = BufReader::new(file).lines().enumerate().peekable();
 
-    for (index, line) in BufReader::new(file).lines().enumerate() {
+    while let Some((index, line)) = lines.next() {
         let line_number = index + 1;
         let line = line?;
         if line.is_empty() {
             return Err(invalid_transcript(path, line_number, "empty record"));
         }
-        let segment: TranscriptSegment = serde_json::from_str(&line).map_err(|error| {
-            invalid_transcript(path, line_number, format!("invalid JSON: {error}"))
-        })?;
+        let is_last = lines.peek().is_none();
+        let segment: TranscriptSegment = match serde_json::from_str(&line) {
+            Ok(segment) => segment,
+            // A crash can leave the final write half done. Only with the
+            // explicit partial opt-in do we drop that last, unreadable line.
+            Err(_) if allow_partial && is_last => {
+                tracing::warn!(
+                    path = %path.display(),
+                    line = line_number,
+                    "ignoring an incomplete last transcript line"
+                );
+                break;
+            }
+            Err(error) => {
+                return Err(invalid_transcript(
+                    path,
+                    line_number,
+                    format!("invalid JSON: {error}"),
+                ));
+            }
+        };
         if segment.schema_version > SCHEMA_VERSION {
             return Err(invalid_transcript(
                 path,
@@ -385,10 +408,26 @@ mod tests {
             .expect("fixture should serialize");
         fs::write(&transcript, format!("{valid}\nnot-json\n")).expect("fixture should be written");
 
-        let error =
-            read_segments(&transcript, Uuid::nil()).expect_err("invalid transcript should fail");
+        let error = read_segments(&transcript, Uuid::nil(), false)
+            .expect_err("invalid transcript should fail");
 
         assert!(matches!(error, Error::InvalidTranscript { line: 2, .. }));
+    }
+
+    #[test]
+    fn partial_export_ignores_only_a_torn_last_line() {
+        let temporary = tempfile::tempdir().expect("temp directory should be created");
+        let transcript = temporary.path().join(TRANSCRIPT_FILE);
+        let valid = serde_json::to_string(&segment(0, 1_000_000, "Prima riga"))
+            .expect("fixture should serialize");
+        fs::write(&transcript, format!("{valid}\n{{\"incomplete\""))
+            .expect("fixture should be written");
+
+        let segments = read_segments(&transcript, Uuid::nil(), true)
+            .expect("a torn last line should be ignored");
+
+        assert_eq!(segments.len(), 1);
+        assert!(read_segments(&transcript, Uuid::nil(), false).is_err());
     }
 
     #[test]

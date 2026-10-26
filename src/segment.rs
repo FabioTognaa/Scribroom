@@ -18,6 +18,29 @@ const VAD_THRESHOLD_MAX: f32 = 0.25;
 /// Time constant of the background-noise estimate.
 const NOISE_TAU_SECONDS: f32 = 1.0;
 
+/// Exponential moving average of the background noise. Shared by the segmenter
+/// and the silence watchdog so both answer "is this voice?" the same way.
+#[derive(Debug, Default)]
+pub(crate) struct NoiseFloor {
+    level: f32,
+}
+
+impl NoiseFloor {
+    pub(crate) fn update(&mut self, chunk_rms: f32, duration_us: u64) {
+        let alpha = (duration_us as f32 / 1_000_000.0 / NOISE_TAU_SECONDS).clamp(0.0, 1.0);
+        self.level += (chunk_rms - self.level) * alpha;
+    }
+
+    pub(crate) fn open_threshold(&self, energy_threshold: f32, multiplier: f32) -> f32 {
+        let adaptive = (self.level * multiplier).min(VAD_THRESHOLD_MAX);
+        adaptive.max(energy_threshold)
+    }
+
+    pub(crate) fn close_threshold(&self, open: f32) -> f32 {
+        (open / HYSTERESIS_RATIO).max(self.level)
+    }
+}
+
 /// A maximal run of unvoiced chunks inside an active segment, kept to find a
 /// pause to split long segments on.
 #[derive(Debug)]
@@ -47,9 +70,8 @@ pub struct Segmenter {
     active: Option<ActiveSegment>,
     voice_run_us: u64,
     first_voice_start: Option<TimestampUs>,
-    /// Exponential moving average of the RMS of non-voice chunks: the
-    /// estimated background noise the voice threshold adapts to.
-    noise_floor: f32,
+    /// Estimated background noise the voice threshold adapts to.
+    noise_floor: NoiseFloor,
     metrics: SegmentationMetrics,
 }
 
@@ -62,7 +84,7 @@ impl Segmenter {
             active: None,
             voice_run_us: 0,
             first_voice_start: None,
-            noise_floor: 0.0,
+            noise_floor: NoiseFloor::default(),
             metrics: SegmentationMetrics::default(),
         })
     }
@@ -76,19 +98,14 @@ impl Segmenter {
     /// configured multiplier, never below the manual floor, never above the
     /// safety ceiling.
     fn open_threshold(&self) -> f32 {
-        let adaptive = (self.noise_floor * self.config.noise_multiplier).min(VAD_THRESHOLD_MAX);
-        adaptive.max(self.config.energy_threshold)
+        self.noise_floor
+            .open_threshold(self.config.energy_threshold, self.config.noise_multiplier)
     }
 
     /// Threshold to keep speech open: lower than the opening one (hysteresis),
     /// but never below the estimated noise itself.
     fn close_threshold(&self, open: f32) -> f32 {
-        (open / HYSTERESIS_RATIO).max(self.noise_floor)
-    }
-
-    fn update_noise_floor(&mut self, chunk_rms: f32, duration_us: u64) {
-        let alpha = (duration_us as f32 / 1_000_000.0 / NOISE_TAU_SECONDS).clamp(0.0, 1.0);
-        self.noise_floor += (chunk_rms - self.noise_floor) * alpha;
+        self.noise_floor.close_threshold(open)
     }
 
     pub fn push_chunk(&mut self, chunk: PcmChunk) -> Vec<SpeechSegment> {
@@ -104,7 +121,7 @@ impl Segmenter {
             let open = self.open_threshold();
             let voiced = chunk_rms >= open;
             if !voiced {
-                self.update_noise_floor(chunk_rms, duration_us);
+                self.noise_floor.update(chunk_rms, duration_us);
             }
             voiced
         };

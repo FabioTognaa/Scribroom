@@ -17,7 +17,7 @@ use crate::domain::{
 };
 use crate::live_audio::{LiveAudioChunk, LiveAudioConfig};
 use crate::schema::{CURRENT_SESSION_FILE, SCHEMA_VERSION};
-use crate::segment::{Segmenter, rms};
+use crate::segment::{NoiseFloor, Segmenter, rms};
 use crate::storage::{
     CurrentSession, ExclusiveFileLock, SessionStorage, atomic_write_json, read_json,
     repair_jsonl_tail, unix_time_ms,
@@ -167,11 +167,14 @@ impl Drop for ShutdownOnDrop {
 }
 
 /// Consecutive-silence watchdog for live sessions. Silence is measured in audio
-/// time, not wall time. A voiced chunk clears the count only once the voice
-/// lasts `voice_trigger`, the same rule the segmenter uses to open a segment,
-/// so an isolated click cannot keep a silent session alive.
+/// time, not wall time, and the threshold adapts to the background noise with
+/// the same rule the segmenter uses. A voiced chunk clears the count only once
+/// the voice lasts `voice_trigger`, so an isolated click cannot keep a silent
+/// session alive.
 struct SilenceWatcher {
     threshold: f32,
+    noise_multiplier: f32,
+    noise_floor: NoiseFloor,
     voice_trigger: Duration,
     timeout: Duration,
     silence: Duration,
@@ -179,9 +182,16 @@ struct SilenceWatcher {
 }
 
 impl SilenceWatcher {
-    fn new(timeout: Duration, threshold: f32, voice_trigger_ms: u64) -> Self {
+    fn new(
+        timeout: Duration,
+        threshold: f32,
+        noise_multiplier: f32,
+        voice_trigger_ms: u64,
+    ) -> Self {
         Self {
             threshold,
+            noise_multiplier,
+            noise_floor: NoiseFloor::default(),
             voice_trigger: Duration::from_millis(voice_trigger_ms),
             timeout,
             silence: Duration::ZERO,
@@ -192,12 +202,17 @@ impl SilenceWatcher {
     /// Returns true once `timeout` of consecutive silence has elapsed.
     fn push(&mut self, chunk: &PcmChunk) -> bool {
         let duration = Duration::from_micros(chunk.duration_us());
-        if rms(&chunk.samples) >= self.threshold {
+        let level = rms(&chunk.samples);
+        let open = self
+            .noise_floor
+            .open_threshold(self.threshold, self.noise_multiplier);
+        if level >= open {
             self.voice_run += duration;
             if self.voice_run >= self.voice_trigger {
                 self.silence = Duration::ZERO;
             }
         } else {
+            self.noise_floor.update(level, chunk.duration_us());
             self.voice_run = Duration::ZERO;
             self.silence += duration;
         }
@@ -275,14 +290,25 @@ pub fn run(options: StartOptions) -> Result<PathBuf> {
     if shutdown.requested.load(Ordering::Relaxed) {
         return Err(Error::OperationInterrupted);
     }
-    run_with_sink_internal(options, &mut sink, Some(&shutdown.requested))
+    let result = run_with_sink_internal(options, &mut sink, Some(&shutdown.requested));
+    // On errors after the sink started, join the ASR worker before the caller
+    // exits so segments already queued are written instead of dying with the
+    // process. `finish` is idempotent on the production sink.
+    if result.is_err() {
+        let _ = sink.finish();
+    }
+    result
 }
 
 pub fn run_with_sink(
     options: StartOptions,
     sink: &mut (impl SegmentSink + Send),
 ) -> Result<PathBuf> {
-    run_with_sink_internal(options, sink, None)
+    let result = run_with_sink_internal(options, &mut *sink, None);
+    if result.is_err() {
+        let _ = sink.finish();
+    }
+    result
 }
 
 pub fn run_with_sink_until(
@@ -290,7 +316,11 @@ pub fn run_with_sink_until(
     sink: &mut (impl SegmentSink + Send),
     shutdown_requested: &AtomicBool,
 ) -> Result<PathBuf> {
-    run_with_sink_internal(options, sink, Some(shutdown_requested))
+    let result = run_with_sink_internal(options, &mut *sink, Some(shutdown_requested));
+    if result.is_err() {
+        let _ = sink.finish();
+    }
+    result
 }
 
 fn run_with_sink_internal(
@@ -392,6 +422,7 @@ fn run_with_sink_internal(
         SilenceWatcher::new(
             timeout,
             segmenter_config.energy_threshold,
+            segmenter_config.noise_multiplier,
             segmenter_config.start_trigger_ms,
         )
     });
@@ -431,9 +462,22 @@ fn run_with_sink_internal(
             if previous_state == SessionState::Running
                 && status.state == SessionState::TranscriptionPaused
             {
-                segmentation_sender
-                    .send(SegmentationCommand::Flush)
-                    .map_err(|_| Error::SegmentationWorkerPanicked)?;
+                // Never block the audio loop on the segmentation queue: if the
+                // worker is behind, replay re-segments the same pause boundary.
+                match segmentation_sender.try_send(SegmentationCommand::Flush) {
+                    Ok(()) => {}
+                    Err(TrySendError::Full(_)) => {
+                        segmentation_replay_required = true;
+                        status.segmentation_replay_required = true;
+                        status.asr_replay_required = true;
+                    }
+                    Err(TrySendError::Disconnected(_)) => {
+                        segmentation_worker_ended_early = true;
+                        segment_drain = false;
+                        source_shutdown.store(true, Ordering::Relaxed);
+                        break;
+                    }
+                }
             }
             if status.state == SessionState::Stopping {
                 segment_drain = previous_state == SessionState::Running;
@@ -1166,7 +1210,7 @@ mod tests {
 
     #[test]
     fn silence_watcher_fires_only_after_the_whole_timeout() {
-        let mut watcher = SilenceWatcher::new(Duration::from_millis(300), 0.02, 60);
+        let mut watcher = SilenceWatcher::new(Duration::from_millis(300), 0.02, 4.0, 60);
         for index in 0..14 {
             assert!(!watcher.push(&chunk(index, 0.0)));
         }
@@ -1178,7 +1222,7 @@ mod tests {
 
     #[test]
     fn sustained_voice_resets_the_silence_watcher() {
-        let mut watcher = SilenceWatcher::new(Duration::from_millis(300), 0.02, 60);
+        let mut watcher = SilenceWatcher::new(Duration::from_millis(300), 0.02, 4.0, 60);
         for index in 0..10 {
             assert!(!watcher.push(&chunk(index, 0.0)));
         }
@@ -1189,6 +1233,18 @@ mod tests {
             assert!(!watcher.push(&chunk(index, 0.0)));
         }
         assert!(watcher.push(&chunk(27, 0.0)));
+    }
+
+    #[test]
+    fn adaptive_threshold_keeps_a_hum_from_resetting_silence() {
+        // A quiet 1.2 s raises the estimated floor (4x -> ~0.04), so a later
+        // 0.03 hum is silence for the watchdog, as it is for the segmenter.
+        let mut watcher = SilenceWatcher::new(Duration::from_secs(2), 0.02, 4.0, 60);
+        for index in 0..60 {
+            assert!(!watcher.push(&chunk(index, 0.015)));
+        }
+        let fired = (60..200).any(|index| watcher.push(&chunk(index, 0.03)));
+        assert!(fired, "the hum must count as silence and close the session");
     }
 
     #[test]

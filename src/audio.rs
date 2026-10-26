@@ -84,19 +84,7 @@ impl FileAudioSource {
     }
 
     pub fn chunks(&self) -> impl Iterator<Item = PcmChunk> + '_ {
-        self.samples
-            .chunks(self.chunk_frames)
-            .enumerate()
-            .map(|(index, samples)| PcmChunk {
-                source: AudioSourceKind::File,
-                start: TimestampUs(
-                    (index * self.chunk_frames) as u64 * 1_000_000
-                        / u64::from(TARGET_SAMPLE_RATE_HZ),
-                ),
-                sample_rate_hz: TARGET_SAMPLE_RATE_HZ,
-                channels: TARGET_CHANNELS,
-                samples: samples.to_vec(),
-            })
+        (0..).map_while(move |index| self.chunk_at(index))
     }
 
     #[must_use]

@@ -170,27 +170,27 @@ pub struct VadArgs {
     pub vad_noise_multiplier: f32,
 
     /// Consecutive voice required to start a segment.
-    #[arg(long, default_value_t = 60)]
+    #[arg(long, default_value_t = 60, value_parser = clap::value_parser!(u64).range(1..=60_000))]
     pub vad_start_ms: u64,
 
     /// Consecutive silence required to end a segment.
-    #[arg(long, default_value_t = 1600)]
+    #[arg(long, default_value_t = 1600, value_parser = clap::value_parser!(u64).range(1..=60_000))]
     pub vad_end_ms: u64,
 
     /// Audio kept before the first voice chunk.
-    #[arg(long, default_value_t = 200)]
+    #[arg(long, default_value_t = 200, value_parser = clap::value_parser!(u64).range(0..=5_000))]
     pub vad_pre_roll_ms: u64,
 
     /// Audio kept after the last voice chunk.
-    #[arg(long, default_value_t = 200)]
+    #[arg(long, default_value_t = 200, value_parser = clap::value_parser!(u64).range(0..=5_000))]
     pub vad_post_roll_ms: u64,
 
     /// Speech shorter than this is discarded as noise (counted in status.json).
-    #[arg(long, default_value_t = 100)]
+    #[arg(long, default_value_t = 100, value_parser = clap::value_parser!(u64).range(0..=60_000))]
     pub vad_min_speech_ms: u64,
 
     /// Ceiling for a segment; longer speech is split on its longest pause.
-    #[arg(long, default_value_t = 30_000)]
+    #[arg(long, default_value_t = 30_000, value_parser = clap::value_parser!(u64).range(1_000..=120_000))]
     pub vad_max_segment_ms: u64,
 }
 
@@ -460,7 +460,11 @@ fn model_menu_options(models_dir: &Path) -> Vec<ModelOption> {
         .map(|preset| {
             let path = preset.default_path();
             ModelOption {
-                label: preset.label().to_owned(),
+                label: preset
+                    .to_possible_value()
+                    .expect("every preset has a CLI name")
+                    .get_name()
+                    .to_owned(),
                 available: path.is_file(),
                 path,
             }
@@ -995,5 +999,27 @@ mod tests {
             }
         );
         assert!(inference_config(&args.inference, None).context_enabled);
+    }
+
+    #[test]
+    fn unreasonable_vad_durations_are_rejected() {
+        for args in [
+            [
+                "personal-transcriber",
+                "transcribe",
+                "input.mp3",
+                "--vad-pre-roll-ms",
+                "6000",
+            ],
+            [
+                "personal-transcriber",
+                "transcribe",
+                "input.mp3",
+                "--vad-max-segment-ms",
+                "1000000",
+            ],
+        ] {
+            assert!(Cli::try_parse_from(args).is_err());
+        }
     }
 }
