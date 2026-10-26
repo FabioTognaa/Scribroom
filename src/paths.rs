@@ -30,11 +30,24 @@ pub struct Config {
     pub models_dir: Option<PathBuf>,
 }
 
-/// Resolve every directory from the already-decided data root, the explicit
-/// `--sessions-dir` flag and the parsed config. No I/O, so tests never touch
-/// `$HOME`. Precedence: flag > config > default under the data root.
+/// Environment variable that moves the data root for development.
+pub const DATA_DIR_ENV: &str = "SCRIB_DATA_DIR";
+
+/// Resolve every directory from the already-decided default data root, the
+/// explicit `--sessions-dir` flag, the `SCRIB_DATA_DIR` value and the parsed
+/// config. No I/O, so tests never touch `$HOME`. Precedence: flag, then
+/// environment, then config, then the default under the root. A set environment
+/// wins over the config, which is ignored entirely, and its root may be relative
+/// (`.` reproduces the old source-tree layout).
 #[must_use]
-pub fn resolve(data: &Path, sessions_flag: Option<&Path>, config: Option<&Config>) -> DataDirs {
+pub fn resolve(
+    default_root: &Path,
+    sessions_flag: Option<&Path>,
+    environment: Option<&Path>,
+    config: Option<&Config>,
+) -> DataDirs {
+    let data = environment.unwrap_or(default_root);
+    let config = config.filter(|_| environment.is_none());
     DataDirs {
         data: data.to_path_buf(),
         sessions: sessions_flag
@@ -158,16 +171,92 @@ mod tests {
 
     /// Compose the two pure steps the way `data_dirs` does: parse the config
     /// text, then resolve. Nothing here touches `$HOME` or the disk.
-    fn dirs(config: Option<&str>, sessions_flag: Option<&Path>) -> Result<DataDirs> {
+    fn dirs(
+        config: Option<&str>,
+        environment: Option<&Path>,
+        sessions_flag: Option<&Path>,
+    ) -> Result<DataDirs> {
         let config = config
             .map(|text| parse_config(text, Path::new(CONFIG_PATH), Path::new(HOME)))
             .transpose()?;
-        Ok(resolve(Path::new(DATA), sessions_flag, config.as_ref()))
+        Ok(resolve(
+            Path::new(DATA),
+            sessions_flag,
+            environment,
+            config.as_ref(),
+        ))
+    }
+
+    #[test]
+    fn precedence_is_flag_then_environment_then_config_then_default() {
+        let config =
+            r#"{"sessions_dir": "/Volumes/ext/sessions", "models_dir": "/Volumes/ext/models"}"#;
+        let environment = Path::new("/tmp/dev-root");
+        let flag = Path::new("/tmp/one-off");
+
+        let all = dirs(Some(config), Some(environment), Some(flag))
+            .expect("every source is valid at once");
+        assert_eq!(all.data, environment);
+        assert_eq!(all.sessions, flag);
+        assert_eq!(all.models, Path::new("/tmp/dev-root/models"));
+
+        let environment_over_config =
+            dirs(Some(config), Some(environment), None).expect("environment beats config");
+        assert_eq!(
+            environment_over_config.sessions,
+            Path::new("/tmp/dev-root/sessions")
+        );
+        assert_eq!(
+            environment_over_config.models,
+            Path::new("/tmp/dev-root/models")
+        );
+
+        let config_over_default = dirs(Some(config), None, None).expect("config beats the default");
+        assert_eq!(config_over_default.data, Path::new(DATA));
+        assert_eq!(
+            config_over_default.sessions,
+            Path::new("/Volumes/ext/sessions")
+        );
+    }
+
+    #[test]
+    fn environment_root_reproduces_the_source_layout() {
+        let dirs = dirs(None, Some(Path::new(".")), None).expect("a relative root is valid");
+
+        assert_eq!(dirs.data, Path::new("."));
+        assert_eq!(dirs.sessions, Path::new("./sessions"));
+        assert_eq!(dirs.models, Path::new("./models"));
+    }
+
+    #[test]
+    fn relative_environment_root_stays_relative() {
+        let dirs = dirs(None, Some(Path::new("devdata")), None).expect("a relative root is valid");
+
+        assert_eq!(dirs.sessions, Path::new("devdata/sessions"));
+        assert_eq!(dirs.models, Path::new("devdata/models"));
+    }
+
+    #[test]
+    fn explicit_flag_stays_relative_under_the_environment_root() {
+        let dirs = dirs(None, Some(Path::new(".")), Some(Path::new("out")))
+            .expect("a relative flag is valid");
+
+        assert_eq!(dirs.sessions, Path::new("out"));
+    }
+
+    #[test]
+    fn without_the_environment_the_platform_default_is_the_root() {
+        let platform = Path::new("/Users/test/Library/Application Support/Scrib");
+        let dirs = resolve(platform, None, None, None);
+
+        assert_eq!(dirs.data, platform);
+        assert_eq!(dirs.sessions, platform.join("sessions"));
+        assert_eq!(dirs.models, platform.join("models"));
     }
 
     #[test]
     fn sessions_and_models_live_under_the_data_root() {
-        let dirs = dirs(None, None).expect("no config is not an error");
+        let dirs = dirs(None, None, None).expect("no config is not an error");
 
         assert_eq!(dirs.data, Path::new(DATA));
         assert_eq!(dirs.sessions, Path::new("/data/Scrib/sessions"));
@@ -176,20 +265,25 @@ mod tests {
 
     #[test]
     fn one_config_key_moves_only_that_directory() {
-        let models = dirs(Some(r#"{"models_dir": "/Volumes/ext/models"}"#), None)
+        let models = dirs(Some(r#"{"models_dir": "/Volumes/ext/models"}"#), None, None)
             .expect("a models_dir key is valid");
         assert_eq!(models.models, Path::new("/Volumes/ext/models"));
         assert_eq!(models.sessions, Path::new("/data/Scrib/sessions"));
 
-        let sessions = dirs(Some(r#"{"sessions_dir": "/Volumes/ext/sessions"}"#), None)
-            .expect("a sessions_dir key is valid");
+        let sessions = dirs(
+            Some(r#"{"sessions_dir": "/Volumes/ext/sessions"}"#),
+            None,
+            None,
+        )
+        .expect("a sessions_dir key is valid");
         assert_eq!(sessions.sessions, Path::new("/Volumes/ext/sessions"));
         assert_eq!(sessions.models, Path::new("/data/Scrib/models"));
     }
 
     #[test]
     fn explicit_sessions_flag_wins_over_the_default() {
-        let dirs = dirs(None, Some(Path::new("elsewhere"))).expect("no config is not an error");
+        let dirs =
+            dirs(None, None, Some(Path::new("elsewhere"))).expect("no config is not an error");
 
         assert_eq!(dirs.sessions, Path::new("elsewhere"));
         assert_eq!(dirs.models, Path::new("/data/Scrib/models"));
@@ -199,6 +293,7 @@ mod tests {
     fn explicit_sessions_flag_wins_over_the_config() {
         let dirs = dirs(
             Some(r#"{"sessions_dir": "/Volumes/ext/sessions"}"#),
+            None,
             Some(Path::new("/tmp/one-off")),
         )
         .expect("a valid config with a flag is not an error");
@@ -211,6 +306,7 @@ mod tests {
         let dirs = dirs(
             Some(r#"{"sessions_dir": "~/Documenti/sessioni", "models_dir": "~"}"#),
             None,
+            None,
         )
         .expect("a tilde path is valid");
 
@@ -220,7 +316,7 @@ mod tests {
 
     #[test]
     fn relative_config_path_is_rejected_citing_the_config_file() {
-        let error = dirs(Some(r#"{"sessions_dir": "sessioni"}"#), None)
+        let error = dirs(Some(r#"{"sessions_dir": "sessioni"}"#), None, None)
             .expect_err("a relative path must be rejected")
             .to_string();
 
@@ -230,7 +326,7 @@ mod tests {
 
     #[test]
     fn malformed_json_is_rejected_citing_the_config_file() {
-        let error = dirs(Some(r#"{"sessions_dir": "#), None)
+        let error = dirs(Some(r#"{"sessions_dir": "#), None, None)
             .expect_err("malformed JSON must be rejected")
             .to_string();
 
@@ -240,7 +336,7 @@ mod tests {
     #[test]
     fn empty_config_file_is_rejected() {
         for text in ["", "  \n"] {
-            let error = dirs(Some(text), None)
+            let error = dirs(Some(text), None, None)
                 .expect_err("an empty config must be rejected")
                 .to_string();
             assert!(error.contains(CONFIG_PATH), "{error}");
@@ -251,6 +347,7 @@ mod tests {
     fn unknown_config_keys_are_ignored() {
         let dirs = dirs(
             Some(r#"{"sessions_dir": "/Volumes/ext/sessions", "future_key": [1, 2]}"#),
+            None,
             None,
         )
         .expect("an unknown key must not fail the parse");
