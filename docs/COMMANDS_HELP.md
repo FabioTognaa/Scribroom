@@ -66,12 +66,12 @@ avvia nulla.
 
 Preset e file documentati:
 
-| Preset           | File                                  | Dimensione |
+| Preset           | File nella cartella modelli            | Dimensione |
 | ---------------- | ------------------------------------- | ---------- |
-| `small`          | `models/ggml-small-q5_1.bin`          | ~190 MB    |
-| `medium`         | `models/ggml-medium-q5_0.bin`         | ~540 MB    |
-| `large-v3-turbo` | `models/ggml-large-v3-turbo-q8_0.bin` | ~874 MB    |
-| `large-v3`       | `models/ggml-large-v3-q5_0.bin`       | ~1,1 GB    |
+| `small`          | `ggml-small-q5_1.bin`                 | ~190 MB    |
+| `medium`         | `ggml-medium-q5_0.bin`                | ~540 MB    |
+| `large-v3-turbo` | `ggml-large-v3-turbo-q8_0.bin`        | ~874 MB    |
+| `large-v3`       | `ggml-large-v3-q5_0.bin`              | ~1,1 GB    |
 
 I modelli si cercano in `models/` dentro la cartella dati
 (`~/Library/Application Support/Scrib/models/` su macOS), non nella directory da
@@ -169,8 +169,8 @@ da 1–30 o non intero viene rifiutato da clap con un errore in inglese.
 scrib transcribe [FILE] [opzioni]
 ```
 
-Trascrive un file audio esistente, senza registrare e senza conservare audio: in
-`sessions/` nasce una cartella nuova (stesso nome `YY-MM-DD` di `start`) con dentro
+Trascrive un file audio esistente, senza registrare e senza conservare audio: nella
+cartella sessioni nasce una cartella nuova (stesso nome `YY-MM-DD` di `start`) con dentro
 solo `<nome>.txt`. Non sovrascrive mai nulla, perché la cartella è nuova; se la
 trascrizione fallisce non resta niente sul disco. Elabora un solo file per
 invocazione, in un unico thread. Se `FILE` è omesso, il percorso viene richiesto su
@@ -284,7 +284,7 @@ Comandi da eseguire dalla radice del repository durante lo sviluppo.
 - `cargo build --release` — compila la build ottimizzata in `target/release/`.
 - `cargo run -- <comando>` — esegue il binario compilato senza installarlo, es. `cargo run -- devices`.
 - `cargo install --path .` — installa `scrib` nel sistema.
-- `SCRIB_MODEL=models/ggml-small-q5_1.bin cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
+- `SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
 - `cargo run --release --bin asr-benchmark -- <opzioni>` — esegue il benchmark ASR (opzioni in `benchmarks/README.md`).
 
 controlli della milestone corrente sono:
@@ -298,5 +298,5 @@ La build non ottimizzata finisce in target/debug/, quella ottimizzata in target/
 
 Il test con un modello Whisper reale è ignorato per impostazione predefinita e richiede SCRIB_MODEL:
 
-SCRIB_MODEL=models/ggml-small-q5_1.bin \
+SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" \
  cargo test real_whisper_model_processes_local_audio -- --ignored
