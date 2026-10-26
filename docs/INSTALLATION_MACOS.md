@@ -22,13 +22,13 @@ cargo build --release
 ATTENZIONE: i modelli quantizzati sono molteplici e non sono inclusi nel repo di
 default. È possibile scaricarli tramite i comandi elencati qui sotto.
 
-Dalla root del progetto, scaricare il modello predefinito:
+Scaricare il modello predefinito nella cartella dati:
 
 ```sh
-mkdir -p models
+mkdir -p "$HOME/Library/Application Support/Scrib/models"
 curl -fL \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin \
-  -o models/ggml-large-v3-turbo-q8_0.bin
+  -o "$HOME/Library/Application Support/Scrib/models/ggml-large-v3-turbo-q8_0.bin"
 ```
 
 Per un modello più leggero c'è `small`:
@@ -36,13 +36,13 @@ Per un modello più leggero c'è `small`:
 ```sh
 curl -fL \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin \
-  -o models/ggml-small-q5_1.bin
+  -o "$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin"
 ```
 
 ### Scelta del modello
 
 Se avvii `start` da un terminale comparirà un menu che elenca i preset con lo stato `[scaricato]`/`[mancante]` e gli altri
-file `.bin` presenti in `models/`; si può selezionare quello con cui si desidera procedere.
+file `.bin` presenti nella cartella `models/` della cartella dati; si può selezionare quello con cui si desidera procedere.
 
 Consiglio caldamente di usare `large-v3-turbo` per la trascrizione, la qualità del prodotto finale è superiore, anche se richiede un effort più imposrtante lato processore e memoria.
 

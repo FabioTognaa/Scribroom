@@ -55,7 +55,7 @@ opzioni **VAD** e di **inferenza** valgono per `start` e `transcribe`.
 | Opzione                 | Tipo         | Default                         | Descrizione                                                                                           |
 | ----------------------- | ------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | `--model <PERCORSO>`    | percorso     | —                               | File GGML locale. Ha la precedenza su `--model-preset`.                                               |
-| `--model-preset <NOME>` | enum         | `large-v3-turbo`                | Modello documentato risolto sotto `models/`. Valori: `small`, `medium`, `large-v3-turbo`, `large-v3`. |
+| `--model-preset <NOME>` | enum         | `large-v3-turbo`                | Modello documentato risolto in `models/` dentro la cartella dati. Valori: `small`, `medium`, `large-v3-turbo`, `large-v3`. |
 | `--language <LINGUA>`   | `it` \| `en` | `it`                            | Lingua parlata, valida per tutta la sessione o per l'intero file. Nessun rilevamento automatico.      |
 | `--asr-prompt <TESTO>`  | testo        | prompt predefinito della lingua | Prompt iniziale per Whisper. `--asr-prompt ""` lo disattiva.                                          |
 
@@ -73,9 +73,9 @@ Preset e file documentati:
 | `large-v3-turbo` | `models/ggml-large-v3-turbo-q8_0.bin` | ~874 MB    |
 | `large-v3`       | `models/ggml-large-v3-q5_0.bin`       | ~1,1 GB    |
 
-Il percorso `models/` è relativo alla directory da cui lanci il comando: dopo
-`cargo install`, esegui dalla root del clone oppure passa `--model` con un
-percorso assoluto.
+I modelli si cercano in `models/` dentro la cartella dati
+(`~/Library/Application Support/Scrib/models/` su macOS), non nella directory da
+cui lanci il comando. `--model` accetta qualunque percorso.
 
 ### Segmentazione vocale (VAD)
 
@@ -131,7 +131,7 @@ l'exit code è diverso da zero.
 | `--probe-audio`             | flag     | spento                  | Apre entrambi gli input live per tre secondi e verifica che arrivi segnale, senza creare una sessione. |
 | `--microphone <NOME>`       | testo    | input predefinito       | Microfono usato dal probe. Richiede `--probe-audio`.                                                   |
 | `--system-audio <NOME>`     | testo    | BlackHole               | Input di sistema usato dal probe. Richiede `--probe-audio`.                                            |
-| `--sessions-dir <PERCORSO>` | percorso | `sessions`              | Directory delle sessioni da verificare.                                                                |
+| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions`              | Directory delle sessioni da verificare.                                                                |
 
 Senza `--probe-audio`, permesso del microfono e routing reale restano non
 verificati e il report contiene un avviso.
@@ -155,7 +155,7 @@ personal-transcriber start [opzioni]
 | `--vad-start-ms <MS>`          | intero       | `60`               | Vedi “Segmentazione vocale”.         |
 | `--vad-end-ms <MS>`            | intero       | `1600`             | Vedi “Segmentazione vocale”.         |
 | `--asr-flash-attention <BOOL>` | booleano     | `true`             | Vedi “Inferenza”.                    |
-| `--sessions-dir <PERCORSO>`    | percorso     | `sessions`         | Directory in cui creare la sessione. |
+| `--sessions-dir <PERCORSO>`    | percorso     | `cartella dati/sessions`         | Directory in cui creare la sessione. |
 
 Con `--silence-timeout` la sessione si chiude da sola dopo N minuti consecutivi di
 silenzio. Il conteggio è in tempo audio e non si ferma con `pause`: vale la soglia
@@ -192,7 +192,7 @@ con `-v`.
 | `--vad-start-ms <MS>`          | intero       | `60`                                         | Vedi “Segmentazione vocale”.                   |
 | `--vad-end-ms <MS>`            | intero       | `1600`                                       | Vedi “Segmentazione vocale”.                   |
 | `--asr-flash-attention <BOOL>` | booleano     | `true`                                       | Vedi “Inferenza”.                              |
-| `--sessions-dir <PERCORSO>`    | percorso     | `sessions`                                   | Directory in cui creare la cartella di output. |
+| `--sessions-dir <PERCORSO>`    | percorso     | `cartella dati/sessions`                                   | Directory in cui creare la cartella di output. |
 
 I WAV passano dal lettore in memoria, quindi ereditano il limite di 64 MiB e 30
 minuti; gli altri formati sono decodificati in streaming e non hanno tale
@@ -214,7 +214,7 @@ file.
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `pause`
 
@@ -227,7 +227,7 @@ aperto e non attraversa l'intervallo sospeso. In questo modo la trascrizione sub
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `resume`
 
@@ -239,7 +239,7 @@ Riprende la trascrizione dopo una `pause`.
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `stop`
 
@@ -253,7 +253,7 @@ comandi di controllo sono rifiutati.
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `export`
 

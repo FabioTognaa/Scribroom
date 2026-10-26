@@ -62,6 +62,12 @@ pub fn status_report(sessions_dir: &Path) -> Result<StatusReport> {
 
 pub fn request(sessions_dir: &Path, action: ControlAction) -> Result<SessionStatus> {
     let deadline = Instant::now() + CONTROL_TIMEOUT;
+    // Only `start` and `transcribe` create the session folder. Without a current
+    // session there is nothing to control, and `pause`/`resume`/`stop` must not
+    // create anything.
+    if !sessions_dir.join(CURRENT_SESSION_FILE).exists() {
+        return Err(Error::NoCurrentSession(sessions_dir.to_path_buf()));
+    }
     let control_lock = acquire_control_lock(sessions_dir, deadline)?;
     let (_, paths) = current_session(sessions_dir)?;
     let status: SessionStatus = read_json(&paths.status)?;
@@ -142,7 +148,6 @@ pub fn request(sessions_dir: &Path, action: ControlAction) -> Result<SessionStat
 }
 
 fn acquire_control_lock(sessions_dir: &Path, deadline: Instant) -> Result<ExclusiveFileLock> {
-    std::fs::create_dir_all(sessions_dir)?;
     let lock_path = sessions_dir.join(CONTROL_LOCK_FILE);
     while Instant::now() < deadline {
         if let Some(lock) = ExclusiveFileLock::try_acquire(&lock_path)? {
@@ -245,6 +250,21 @@ fn current_session(sessions_dir: &Path) -> Result<(CurrentSession, SessionPaths)
 mod tests {
     use super::*;
     use crate::schema::{SESSION_METADATA_FILE, STATUS_FILE};
+
+    #[test]
+    fn control_commands_do_not_create_a_missing_sessions_directory() {
+        let temporary = tempfile::tempdir().expect("temporary directory should be created");
+        let sessions = temporary.path().join("not-created-yet");
+
+        assert!(matches!(
+            request(&sessions, ControlAction::Stop),
+            Err(Error::NoCurrentSession(_))
+        ));
+        assert!(
+            !sessions.exists(),
+            "pause/resume/stop must not create the session folder"
+        );
+    }
 
     #[test]
     fn missing_sessions_directory_means_no_current_session() {
