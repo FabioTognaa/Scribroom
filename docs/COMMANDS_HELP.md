@@ -1,12 +1,12 @@
 # Comandi e opzioni
 
-Riferimento completo della riga di comando di `personal-transcriber`. Elenca
+Riferimento completo della riga di comando di `scrib`. Elenca
 ogni comando e ogni opzione con valore, default e vincoli, così il README può
 restare concettuale e rimandarli qui.
 
 ## Sintassi generale
 
-I comandi seguenti presuppongono che `personal-transcriber` sia installato nel
+I comandi seguenti presuppongono che `scrib` sia installato nel
 sistema con:
 
 ```text
@@ -16,14 +16,14 @@ cargo install --path .
 È possibile disinstallarlo in ogni momento con:
 
 ```text
-cargo uninstall <nome-package>.
+cargo uninstall scrib
 ```
 
 In alternativa si possono seguire i comandi di questa sezione senza installare
-`personal-transcriber`, eseguendo direttamente il binario compilato.
+`scrib`, eseguendo direttamente il binario compilato.
 
 ```text
-personal-transcriber <comando> [opzioni]
+scrib <comando> [opzioni]
 ```
 
 Il binario esegue un solo comando per invocazione e resta in primo piano fino
@@ -107,7 +107,7 @@ spento di default. Per controllare se l'accuraezza migliora a scapito di un esos
 ### `devices`
 
 ```text
-personal-transcriber devices
+scrib devices
 ```
 
 Elenca in JSON i dispositivi audio visibili, con direzione supportata e
@@ -117,7 +117,7 @@ quelle globali.
 ### `doctor`
 
 ```text
-personal-transcriber doctor [opzioni]
+scrib doctor [opzioni]
 ```
 
 Verifica i prerequisiti locali senza modificare la configurazione di macOS.
@@ -139,7 +139,7 @@ verificati e il report contiene un avviso.
 ### `start`
 
 ```text
-personal-transcriber start [opzioni]
+scrib start [opzioni]
 ```
 
 | Opzione                        | Tipo         | Default            | Descrizione                          |
@@ -166,7 +166,7 @@ da 1–30 o non intero viene rifiutato da clap con un errore in inglese.
 ### `transcribe`
 
 ```text
-personal-transcriber transcribe [FILE] [opzioni]
+scrib transcribe [FILE] [opzioni]
 ```
 
 Trascrive un file audio esistente, senza registrare e senza conservare audio: in
@@ -205,7 +205,7 @@ Di seguito sono riporati i comandi da poter eseguire per monitorare e gestire la
 ### `status`
 
 ```text
-personal-transcriber status [opzioni]
+scrib status [opzioni]
 ```
 
 Stampa il report JSON della sessione corrente: metadati, stato, durata,
@@ -219,7 +219,7 @@ file.
 ### `pause`
 
 ```text
-personal-transcriber pause [opzioni]
+scrib pause [opzioni]
 ```
 
 Sospende la trascrizione lasciando attiva la registrazione. Chiude il segmento
@@ -232,7 +232,7 @@ aperto e non attraversa l'intervallo sospeso. In questo modo la trascrizione sub
 ### `resume`
 
 ```text
-personal-transcriber resume [opzioni]
+scrib resume [opzioni]
 ```
 
 Riprende la trascrizione dopo una `pause`.
@@ -244,7 +244,7 @@ Riprende la trascrizione dopo una `pause`.
 ### `stop`
 
 ```text
-personal-transcriber stop [opzioni]
+scrib stop [opzioni]
 ```
 
 Finalizza la sessione attiva, questo è il comando che deve essere lanciato per chiudere la registrazione e completare la crezione della cartella di sessione. Attende il completamento. Su una sessione già
@@ -258,7 +258,7 @@ comandi di controllo sono rifiutati.
 ### `export`
 
 ```text
-personal-transcriber export <SESSIONE> [opzioni]
+scrib export <SESSIONE> [opzioni]
 ```
 
 Rilegge il file `transcript.jsonl` di una sessione e lo converte in jsonl,
@@ -283,8 +283,8 @@ Comandi da eseguire dalla radice del repository durante lo sviluppo.
 - `cargo build` — compila la build non ottimizzata in `target/debug/`.
 - `cargo build --release` — compila la build ottimizzata in `target/release/`.
 - `cargo run -- <comando>` — esegue il binario compilato senza installarlo, es. `cargo run -- devices`.
-- `cargo install --path .` — installa `personal-transcriber` nel sistema.
-- `PERSONAL_TRANSCRIBER_MODEL=models/ggml-small-q5_1.bin cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
+- `cargo install --path .` — installa `scrib` nel sistema.
+- `SCRIB_MODEL=models/ggml-small-q5_1.bin cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
 - `cargo run --release --bin asr-benchmark -- <opzioni>` — esegue il benchmark ASR (opzioni in `benchmarks/README.md`).
 
 controlli della milestone corrente sono:
@@ -296,7 +296,7 @@ cargo build
 cargo build --release
 La build non ottimizzata finisce in target/debug/, quella ottimizzata in target/release/.
 
-Il test con un modello Whisper reale è ignorato per impostazione predefinita e richiede PERSONAL_TRANSCRIBER_MODEL:
+Il test con un modello Whisper reale è ignorato per impostazione predefinita e richiede SCRIB_MODEL:
 
-PERSONAL_TRANSCRIBER_MODEL=models/ggml-small-q5_1.bin \
+SCRIB_MODEL=models/ggml-small-q5_1.bin \
  cargo test real_whisper_model_processes_local_audio -- --ignored

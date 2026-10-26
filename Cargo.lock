@@ -821,28 +821,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "personal-transcriber"
-version = "1.0.0"
-dependencies = [
- "clap",
- "cpal",
- "crossbeam-channel",
- "hound",
- "libc",
- "serde",
- "serde_json",
- "sha2",
- "signal-hook",
- "symphonia",
- "tempfile",
- "thiserror 2.0.21",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "whisper-rs",
-]
-
-[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -965,6 +943,28 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "scrib"
+version = "1.0.0"
+dependencies = [
+ "clap",
+ "cpal",
+ "crossbeam-channel",
+ "hound",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+ "signal-hook",
+ "symphonia",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "whisper-rs",
+]
 
 [[package]]
 name = "semver"

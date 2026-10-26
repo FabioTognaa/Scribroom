@@ -3,15 +3,13 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use personal_transcriber::Result;
-use personal_transcriber::asr::{
-    AsrEngine, AsrOutput, TranscribingSink, WhisperEngine, model_identity,
-};
-use personal_transcriber::audio::FileAudioSource;
-use personal_transcriber::domain::{
+use scrib::Result;
+use scrib::asr::{AsrEngine, AsrOutput, TranscribingSink, WhisperEngine, model_identity};
+use scrib::audio::FileAudioSource;
+use scrib::domain::{
     InferenceConfig, ModelIdentity, SegmenterConfig, SpeechSegment, TimestampUs, TranscriptSegment,
 };
-use personal_transcriber::session::{self, SegmentSink, StartOptions};
+use scrib::session::{self, SegmentSink, StartOptions};
 use uuid::Uuid;
 
 const FIXTURE: &str = "tests/fixtures/m2_speech_with_short_pause.wav";
@@ -43,9 +41,7 @@ impl AsrEngine for FailingAsrEngine {
         _language: &str,
         _config: &InferenceConfig,
     ) -> Result<AsrOutput> {
-        Err(personal_transcriber::Error::Asr(
-            "fixture inference failure".to_owned(),
-        ))
+        Err(scrib::Error::Asr("fixture inference failure".to_owned()))
     }
 }
 
@@ -147,8 +143,8 @@ fn simulated_english_session_writes_verbatim_canonical_transcript() {
     assert_eq!(segments[0].inference, inference);
     assert_eq!(segments[0].no_speech_probability, Some(0.5));
 
-    let status = personal_transcriber::control::current_status(&sessions_dir)
-        .expect("final status should be readable");
+    let status =
+        scrib::control::current_status(&sessions_dir).expect("final status should be readable");
     assert_eq!(status.asr.segments_transcribed, 1);
     assert_eq!(status.asr_queue_depth, 0);
     assert!(status.asr.real_time_factor_milli > 0);
@@ -168,8 +164,8 @@ fn duplicate_segment_ranges_are_not_appended_twice() {
     sink.start(Uuid::nil(), &transcript)
         .expect("sink should start");
     let segment = SpeechSegment {
-        start: personal_transcriber::domain::TimestampUs(0),
-        end: personal_transcriber::domain::TimestampUs(200_000),
+        start: scrib::domain::TimestampUs(0),
+        end: scrib::domain::TimestampUs(200_000),
         samples: vec![0.25; 3_200],
     };
     sink.accept(&segment).expect("first segment should queue");
@@ -200,8 +196,8 @@ fn worker_reports_the_original_inference_error() {
     sink.start(Uuid::nil(), &transcript)
         .expect("sink should start");
     sink.accept(&SpeechSegment {
-        start: personal_transcriber::domain::TimestampUs(0),
-        end: personal_transcriber::domain::TimestampUs(200_000),
+        start: scrib::domain::TimestampUs(0),
+        end: scrib::domain::TimestampUs(200_000),
         samples: vec![0.25; 3_200],
     })
     .expect("segment should queue");
@@ -209,7 +205,7 @@ fn worker_reports_the_original_inference_error() {
     let error = sink.finish().expect_err("inference should fail");
     assert!(matches!(
         error,
-        personal_transcriber::Error::Asr(message) if message == "fixture inference failure"
+        scrib::Error::Asr(message) if message == "fixture inference failure"
     ));
 }
 
@@ -249,16 +245,11 @@ fn session_stops_when_the_asr_worker_fails() {
     )
     .expect_err("ASR failure should stop the session");
 
-    assert!(
-        matches!(error, personal_transcriber::Error::Asr(message) if message == "fixture inference failure")
-    );
+    assert!(matches!(error, scrib::Error::Asr(message) if message == "fixture inference failure"));
     assert!(started.elapsed() < Duration::from_secs(2));
-    let status = personal_transcriber::control::current_status(&sessions_dir)
-        .expect("failed status should be readable");
-    assert_eq!(
-        status.state,
-        personal_transcriber::domain::SessionState::Failed
-    );
+    let status =
+        scrib::control::current_status(&sessions_dir).expect("failed status should be readable");
+    assert_eq!(status.state, scrib::domain::SessionState::Failed);
     assert!(status.audio_position.0 < 2_200_000);
 }
 
@@ -319,8 +310,7 @@ fn segmentation_replay_does_not_duplicate_transcript_ranges() {
         .iter()
         .copied()
         .collect::<std::collections::HashSet<_>>();
-    let status = personal_transcriber::control::current_status(&sessions_dir)
-        .expect("status should be readable");
+    let status = scrib::control::current_status(&sessions_dir).expect("status should be readable");
 
     assert!(status.segmentation_replay_required);
     assert!(!ranges.is_empty());
@@ -374,8 +364,7 @@ fn segmentation_replay_does_not_infer_a_range_twice() {
     )
     .expect("overloaded session should recover by replaying segmentation");
 
-    let status = personal_transcriber::control::current_status(&sessions_dir)
-        .expect("status should be readable");
+    let status = scrib::control::current_status(&sessions_dir).expect("status should be readable");
     assert!(
         status.segmentation_replay_required,
         "the test must actually exercise the replay path"
@@ -397,11 +386,10 @@ fn segmentation_replay_does_not_infer_a_range_twice() {
 }
 
 #[test]
-#[ignore = "requires PERSONAL_TRANSCRIBER_MODEL and a local GGML model"]
+#[ignore = "requires SCRIB_MODEL and a local GGML model"]
 fn real_whisper_model_processes_local_audio() {
     let model_path = PathBuf::from(
-        std::env::var("PERSONAL_TRANSCRIBER_MODEL")
-            .expect("PERSONAL_TRANSCRIBER_MODEL must point to a GGML model"),
+        std::env::var("SCRIB_MODEL").expect("SCRIB_MODEL must point to a GGML model"),
     );
     let config = InferenceConfig::default();
     let mut engine = WhisperEngine::load(&model_path, &config).expect("model should load");
@@ -412,8 +400,8 @@ fn real_whisper_model_processes_local_audio() {
         .flat_map(|chunk| chunk.samples)
         .collect::<Vec<_>>();
     let segment = SpeechSegment {
-        start: personal_transcriber::domain::TimestampUs(0),
-        end: personal_transcriber::domain::TimestampUs(2_200_000),
+        start: scrib::domain::TimestampUs(0),
+        end: scrib::domain::TimestampUs(2_200_000),
         samples,
     };
 

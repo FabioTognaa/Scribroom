@@ -1,6 +1,6 @@
-#
+# Scrib
 
-Welcome to my personal transcriber!
+Welcome to Scrib!
 
 I decided to write this program in order to build a personal tool which was useful, functional and istructive at the same time.
 
@@ -50,7 +50,7 @@ Quest'ultima viene calcolata tramite l'algoritmo SHA-256 e viene memorizzata in 
 Viene poi **caricato Whisper** in memoria:
 
 **Whisper** è una rete neurale di tipo Transformer - create da OpenAI - che svolge la funzione di encoder-decoder per riconsocere il parlato da uno spettrogramma
-I file dei pesi sono disponibili nella cartella **/models**.
+I file dei pesi sono disponibili nella cartella `models/` della cartella dati (`~/Library/Application Support/Scrib/models` su macOS).
 
 Il modello viene fatto girare tramite **Whisper.cpp**, il motore del modello importato tramite whisper-rs.
 
@@ -105,10 +105,10 @@ La build non ottimizzata finisce in `target/debug/`, quella ottimizzata in
 `target/release/`.
 
 Il test con un modello Whisper reale è ignorato per impostazione predefinita e
-richiede `PERSONAL_TRANSCRIBER_MODEL`:
+richiede `SCRIB_MODEL`:
 
 ```sh
-PERSONAL_TRANSCRIBER_MODEL=models/ggml-small-q5_1.bin \
+SCRIB_MODEL=models/ggml-small-q5_1.bin \
   cargo test real_whisper_model_processes_local_audio -- --ignored
 ```
 
