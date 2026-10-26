@@ -48,15 +48,21 @@ pub struct Sources<'a> {
 /// environment wins and its values are ignored, so a broken file is an explicit
 /// error rather than a silent fallback.
 pub fn data_dirs(sessions_flag: Option<&Path>) -> Result<DataDirs> {
+    let environment = std::env::var_os(DATA_DIR_ENV).map(PathBuf::from);
+    data_dirs_with(sessions_flag, environment.as_deref())
+}
+
+/// The environment-free body of [`data_dirs`], so tests can pass a root
+/// without mutating the process environment.
+fn data_dirs_with(sessions_flag: Option<&Path>, environment: Option<&Path>) -> Result<DataDirs> {
     let default_root = platform_data_root()?;
     let home = home_directory()?;
-    let environment = std::env::var_os(DATA_DIR_ENV).map(PathBuf::from);
-    let data_root = environment.as_deref().unwrap_or(&default_root);
+    let data_root = environment.unwrap_or(&default_root);
     let config = load_config(data_root, &home)?;
     Ok(resolve(Sources {
         default_root: &default_root,
         sessions_flag,
-        environment: environment.as_deref(),
+        environment,
         config: config.as_ref(),
     }))
 }
@@ -118,7 +124,11 @@ struct ConfigFile {
 /// Accept an absolute path or one starting with `~`; a relative path has no
 /// obvious meaning, so it is rejected naming the config file to fix.
 fn expand_tilde(value: PathBuf, key: &str, config_path: &Path, home: &Path) -> Result<PathBuf> {
-    if let Ok(rest) = value.strip_prefix("~") {
+    let text = value.to_string_lossy();
+    if text == "~" {
+        return Ok(home.to_path_buf());
+    }
+    if let Some(rest) = text.strip_prefix("~/").or_else(|| text.strip_prefix("~\\")) {
         return Ok(home.join(rest));
     }
     if value.is_absolute() {
@@ -197,10 +207,6 @@ mod tests {
     const DATA: &str = "/data/Scrib";
     const CONFIG_PATH: &str = "/data/Scrib/config.json";
     const HOME: &str = "/Users/test";
-
-    /// `SCRIB_DATA_DIR` is process-global: the test that sets it must not race
-    /// another one.
-    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     /// Compose the two pure steps the way `data_dirs` does: parse the config
     /// text, then resolve. Nothing here touches `$HOME` or the disk.
@@ -353,6 +359,15 @@ mod tests {
     }
 
     #[test]
+    fn tilde_followed_by_a_name_is_not_a_home_shortcut() {
+        let error = dirs(Some(r#"{"sessions_dir": "~altro/sessioni"}"#), None, None)
+            .expect_err("only `~` and `~/` are home shortcuts")
+            .to_string();
+
+        assert!(error.contains(CONFIG_PATH), "{error}");
+    }
+
+    #[test]
     fn relative_config_path_is_rejected_citing_the_config_file() {
         let error = dirs(Some(r#"{"sessions_dir": "sessioni"}"#), None, None)
             .expect_err("a relative path must be rejected")
@@ -429,10 +444,7 @@ mod tests {
     /// The environment picks the root, but the config there is still read and
     /// validated: a broken file must never be a silent fallback.
     #[test]
-    fn data_dirs_reads_the_environment_and_still_loads_the_config() {
-        let _guard = ENV_LOCK
-            .lock()
-            .expect("the environment lock is not poisoned");
+    fn data_dirs_with_environment_still_loads_the_config() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
         let root = temporary.path();
 
@@ -441,14 +453,10 @@ mod tests {
             r#"{"sessions_dir": "/Volumes/ext/sessions"}"#,
         )
         .expect("fixture should be written");
-        // SAFETY: serialized by ENV_LOCK and only read by `data_dirs`.
-        unsafe { std::env::set_var(DATA_DIR_ENV, root) };
-        let valid = data_dirs(None);
+        let valid = data_dirs_with(None, Some(root));
         std::fs::write(root.join("config.json"), r#"{"sessions_dir": "#)
             .expect("fixture should be overwritten");
-        let broken = data_dirs(None);
-        // SAFETY: see above; the value must not leak into other tests.
-        unsafe { std::env::remove_var(DATA_DIR_ENV) };
+        let broken = data_dirs_with(None, Some(root));
 
         let valid = valid.expect("a valid config under the environment root is fine");
         assert_eq!(valid.data, root);
