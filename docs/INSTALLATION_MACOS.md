@@ -12,8 +12,8 @@ compilare:
 ## 1. Clonazione e configurazione dell'ambiente
 
 ```sh
-git clone https://github.com/FabioTognaa/personal-transcriber.git
-cd personal-transcriber
+git clone https://github.com/FabioTognaa/scrib.git
+cd scrib
 cargo build --release
 ```
 
