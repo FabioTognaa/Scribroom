@@ -1,4 +1,4 @@
-# Come funziona Scrib
+# Come funziona Scribroom
 
 Questo documento spiega il programma a chi non lo ha mai visto: che problema risolve,
 con quali pezzi è costruito, e cosa fa davvero dal momento in cui si lancia un
@@ -210,7 +210,7 @@ non un sottotitolo istantaneo.
 
 ## Whisper
 
-Il progetto si appoggia a `whisper-rs` per usare whisper.cpp in locale. Fa girare uno dei modelli che si trovano nella cartella modelli (`~/Library/Application Support/Scrib/models/` su macOS), caricati in memoria una volta sola quando il programma viene inizializzato. Il suo compito è tradurre in testo i campioni che il VAD gli passa come PCM float mono a 16 kHz.
+Il progetto si appoggia a `whisper-rs` per usare whisper.cpp in locale. Fa girare uno dei modelli che si trovano nella cartella modelli (`~/Library/Application Support/Scribroom/models/` su macOS), caricati in memoria una volta sola quando il programma viene inizializzato. Il suo compito è tradurre in testo i campioni che il VAD gli passa come PCM float mono a 16 kHz.
 
 1. Viene validata la config di inferenza: numero di thread, strategia di decodifica, ampiezza del fascio, temperatura e prompt devono essere coerenti fra loro; Core ML viene rifiutato se il binario non è stato compilato per supportarlo.
 2. Il file GGML viene aperto e i pesi caricati in memoria, con la GPU accesa (Metal su Apple Silicon) e la flash attention attiva salvo disattivazione esplicita. Il contesto resta vivo per tutta la sessione e viene riusato da ogni segmento.

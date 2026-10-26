@@ -4,9 +4,9 @@ version = "1.0.0"
 edition = "2024"
 rust-version = "1.88"
 default-run = "scrib"
-description = "Local-first sCLI for recording and transcribing live meetings"
+description = "Scribroom — local-first CLI for recording and transcribing live meetings"
 license = "MIT"
-repository = "https://github.com/FabioTognaa/scrib"
+repository = "https://github.com/FabioTognaa/Scribroom"
 
 [dependencies]
 clap = { version = "4.5.48", features = ["derive"] }

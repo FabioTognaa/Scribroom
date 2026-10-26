@@ -1,6 +1,7 @@
-# Scrib
+# Scribroom
 
-Welcome to Scrib!
+Local meeting transcription: registra una riunione, la trascrive e conserva tutto
+sul tuo disco. Il comando da terminale è `scrib`.
 
 I decided to write this program in order to build a personal tool which was useful, functional and istructive at the same time.
 
@@ -50,7 +51,7 @@ Quest'ultima viene calcolata tramite l'algoritmo SHA-256 e viene memorizzata in 
 Viene poi **caricato Whisper** in memoria:
 
 **Whisper** è una rete neurale di tipo Transformer - create da OpenAI - che svolge la funzione di encoder-decoder per riconsocere il parlato da uno spettrogramma
-I file dei pesi sono disponibili nella cartella `models/` della cartella dati (`~/Library/Application Support/Scrib/models` su macOS).
+I file dei pesi sono disponibili nella cartella `models/` della cartella dati (`~/Library/Application Support/Scribroom/models` su macOS).
 
 Il modello viene fatto girare tramite **Whisper.cpp**, il motore del modello importato tramite whisper-rs.
 
@@ -87,7 +88,7 @@ Per quanto riguarda i formati wav, ad oggi non c'è ancora una funzione nativa c
 
 Sessioni, modelli e configurazione non stanno nella directory da cui lanci il
 comando, ma in una cartella dati per utente:
-`~/Library/Application Support/Scrib/` su macOS, con dentro `sessions/`,
+`~/Library/Application Support/Scribroom/` su macOS, con dentro `sessions/`,
 `models/` e un `config.json` opzionale.
 
 Il config sposta le due sottocartelle, con percorsi assoluti o che iniziano con
@@ -129,7 +130,7 @@ Il test con un modello Whisper reale è ignorato per impostazione predefinita e
 richiede `SCRIB_MODEL`:
 
 ```sh
-SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" \
+SCRIB_MODEL="$HOME/Library/Application Support/Scribroom/models/ggml-small-q5_1.bin" \
   cargo test real_whisper_model_processes_local_audio -- --ignored
 ```
 

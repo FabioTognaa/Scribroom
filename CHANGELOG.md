@@ -28,9 +28,9 @@ progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Changed
 
-- Il prodotto si chiama `scrib`: cambiano package, libreria, binario e il comando
-  da lanciare. Il vecchio comando non esiste più, senza alias. Il test che usa un
-  modello reale legge ora `SCRIB_MODEL`.
+- Il prodotto si chiama Scribroom. Il comando resta `scrib`: package, libreria e
+  binario non cambiano. La cartella dati si sposta da `Scrib/` a `Scribroom/`, e i
+  dati esistenti vanno spostati a mano (decisione in `docs/adr/0002`).
 
 ## [1.0.0] - 2026-10-13
 

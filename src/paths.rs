@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::{Error, Result};
 
 /// Product name, also the directory name inside the platform data root.
-pub const PRODUCT: &str = "Scrib";
+pub const PRODUCT: &str = "Scribroom";
 
 const SESSIONS_DIR: &str = "sessions";
 const MODELS_DIR: &str = "models";
@@ -204,8 +204,8 @@ fn default_root(home: &Path) -> PathBuf {
 mod tests {
     use super::*;
 
-    const DATA: &str = "/data/Scrib";
-    const CONFIG_PATH: &str = "/data/Scrib/config.json";
+    const DATA: &str = "/data/Scribroom";
+    const CONFIG_PATH: &str = "/data/Scribroom/config.json";
     const HOME: &str = "/Users/test";
 
     /// Compose the two pure steps the way `data_dirs` does: parse the config
@@ -285,7 +285,7 @@ mod tests {
 
     #[test]
     fn without_the_environment_the_platform_default_is_the_root() {
-        let platform = Path::new("/Users/test/Library/Application Support/Scrib");
+        let platform = Path::new("/Users/test/Library/Application Support/Scribroom");
         let dirs = resolve(Sources {
             default_root: platform,
             sessions_flag: None,
@@ -303,8 +303,8 @@ mod tests {
         let dirs = dirs(None, None, None).expect("no config is not an error");
 
         assert_eq!(dirs.data, Path::new(DATA));
-        assert_eq!(dirs.sessions, Path::new("/data/Scrib/sessions"));
-        assert_eq!(dirs.models, Path::new("/data/Scrib/models"));
+        assert_eq!(dirs.sessions, Path::new("/data/Scribroom/sessions"));
+        assert_eq!(dirs.models, Path::new("/data/Scribroom/models"));
     }
 
     #[test]
@@ -312,7 +312,7 @@ mod tests {
         let models = dirs(Some(r#"{"models_dir": "/Volumes/ext/models"}"#), None, None)
             .expect("a models_dir key is valid");
         assert_eq!(models.models, Path::new("/Volumes/ext/models"));
-        assert_eq!(models.sessions, Path::new("/data/Scrib/sessions"));
+        assert_eq!(models.sessions, Path::new("/data/Scribroom/sessions"));
 
         let sessions = dirs(
             Some(r#"{"sessions_dir": "/Volumes/ext/sessions"}"#),
@@ -321,7 +321,7 @@ mod tests {
         )
         .expect("a sessions_dir key is valid");
         assert_eq!(sessions.sessions, Path::new("/Volumes/ext/sessions"));
-        assert_eq!(sessions.models, Path::new("/data/Scrib/models"));
+        assert_eq!(sessions.models, Path::new("/data/Scribroom/models"));
     }
 
     #[test]
@@ -330,7 +330,7 @@ mod tests {
             dirs(None, None, Some(Path::new("elsewhere"))).expect("no config is not an error");
 
         assert_eq!(dirs.sessions, Path::new("elsewhere"));
-        assert_eq!(dirs.models, Path::new("/data/Scrib/models"));
+        assert_eq!(dirs.models, Path::new("/data/Scribroom/models"));
     }
 
     #[test]
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn load_config_reads_the_file_and_never_creates_it() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
-        let data = temporary.path().join("Scrib");
+        let data = temporary.path().join("Scribroom");
 
         let absent = load_config(&data, Path::new(HOME)).expect("a missing config is not an error");
         assert_eq!(absent, None);
@@ -473,7 +473,7 @@ mod tests {
     fn platform_default_is_application_support() {
         assert_eq!(
             default_root(Path::new("/Users/test")),
-            Path::new("/Users/test/Library/Application Support/Scrib")
+            Path::new("/Users/test/Library/Application Support/Scribroom")
         );
     }
 

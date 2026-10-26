@@ -780,13 +780,13 @@ mod tests {
             panic!("expected start command");
         };
 
-        let models_dir = Path::new("/data/Scrib/models");
+        let models_dir = Path::new("/data/Scribroom/models");
         assert_eq!(args.model.model, None);
         assert_eq!(args.model.model_preset, None);
         assert_eq!(
             resolve_model_path(args.model.model, args.model.model_preset, models_dir)
                 .unwrap_or_else(|| default_model_path(models_dir)),
-            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
+            PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 
@@ -804,8 +804,8 @@ mod tests {
             args.model
                 .model_preset
                 .unwrap()
-                .path_in(Path::new("/data/Scrib/models")),
-            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
+                .path_in(Path::new("/data/Scribroom/models")),
+            PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 
@@ -829,7 +829,7 @@ mod tests {
             resolve_model_path(
                 args.model.model,
                 args.model.model_preset,
-                Path::new("/data/Scrib/models")
+                Path::new("/data/Scribroom/models")
             ),
             Some(PathBuf::from("models/custom.bin"))
         );
@@ -837,12 +837,12 @@ mod tests {
 
     #[test]
     fn model_resolution_uses_the_preset_or_nothing() {
-        let models_dir = Path::new("/data/Scrib/models");
+        let models_dir = Path::new("/data/Scribroom/models");
 
         assert_eq!(
             resolve_model_path(None, Some(ModelPreset::LargeV3Turbo), models_dir),
             Some(PathBuf::from(
-                "/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin"
+                "/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin"
             ))
         );
         assert_eq!(resolve_model_path(None, None, models_dir), None);
@@ -852,7 +852,7 @@ mod tests {
     fn doctor_defaults_to_the_same_model_as_start() {
         // `doctor` must verify the model `start`/`transcribe` will actually use,
         // so a green check is meaningful when no model flag is passed.
-        let models_dir = Path::new("/data/Scrib/models");
+        let models_dir = Path::new("/data/Scribroom/models");
 
         assert_eq!(
             doctor_model_path(None, None, models_dir),
@@ -861,7 +861,7 @@ mod tests {
         );
         assert_eq!(
             doctor_model_path(None, None, models_dir),
-            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
+            PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 

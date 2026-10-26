@@ -137,15 +137,15 @@ mod tests {
 
     #[test]
     fn presets_resolve_under_the_models_directory() {
-        let models = Path::new("/data/Scrib/models");
+        let models = Path::new("/data/Scribroom/models");
 
         assert_eq!(
             ModelPreset::Small.path_in(models),
-            PathBuf::from("/data/Scrib/models/ggml-small-q5_1.bin")
+            PathBuf::from("/data/Scribroom/models/ggml-small-q5_1.bin")
         );
         assert_eq!(
             ModelPreset::LargeV3Turbo.path_in(models),
-            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
+            PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 

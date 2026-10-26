@@ -1,8 +1,14 @@
-# Scrib
+# Scribroom
 
 Applicazione locale per registrare riunioni, trascriverle e conservare il risultato sul disco dell'utente. Il contesto copre una sola area: la cattura audio, la trascrizione e gli artefatti che ne derivano.
 
 ## Language
+
+### Prodotto
+
+**Scribroom**:
+Il nome del prodotto. Il comando da terminale si chiama `scrib` e non è un sinonimo del prodotto.
+_Avoid_: Scrib, app, tool
 
 ### Sessioni e trascrizioni
 

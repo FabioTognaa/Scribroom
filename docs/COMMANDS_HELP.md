@@ -50,14 +50,14 @@ indirizzano una sessione (`start`, `doctor`, `transcribe`, `status`, `pause`,
 una cartella dati per utente.
 
 ```text
-~/Library/Application Support/Scrib/
+~/Library/Application Support/Scribroom/
 ├── config.json      # opzionale, lo scrive l'utente
 ├── sessions/        # una cartella per sessione o trascrizione
 └── models/          # file GGML di Whisper
 ```
 
-Quello qui sopra è il percorso macOS; su Linux è `$XDG_DATA_HOME/Scrib/`, su
-Windows `%APPDATA%\Scrib\`.
+Quello qui sopra è il percorso macOS; su Linux è `$XDG_DATA_HOME/Scribroom/`, su
+Windows `%APPDATA%\Scribroom\`.
 
 `config.json` è opzionale e sposta le due sottocartelle:
 
@@ -113,7 +113,7 @@ Preset e file documentati:
 | `large-v3`       | `ggml-large-v3-q5_0.bin`              | ~1,1 GB    |
 
 I modelli si cercano in `models/` dentro la cartella dati
-(`~/Library/Application Support/Scrib/models/` su macOS), non nella directory da
+(`~/Library/Application Support/Scribroom/models/` su macOS), non nella directory da
 cui lanci il comando. `--model` accetta qualunque percorso.
 
 ### Segmentazione vocale (VAD)
@@ -323,7 +323,7 @@ Comandi da eseguire dalla radice del repository durante lo sviluppo.
 - `cargo build --release` — compila la build ottimizzata in `target/release/`.
 - `cargo run -- <comando>` — esegue il binario compilato senza installarlo, es. `cargo run -- devices`.
 - `cargo install --path .` — installa `scrib` nel sistema.
-- `SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
+- `SCRIB_MODEL="$HOME/Library/Application Support/Scribroom/models/ggml-small-q5_1.bin" cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
 - `cargo run --release --bin asr-benchmark -- <opzioni>` — esegue il benchmark ASR (opzioni in `benchmarks/README.md`).
 
 controlli della milestone corrente sono:
@@ -337,5 +337,5 @@ La build non ottimizzata finisce in target/debug/, quella ottimizzata in target/
 
 Il test con un modello Whisper reale è ignorato per impostazione predefinita e richiede SCRIB_MODEL:
 
-SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" \
+SCRIB_MODEL="$HOME/Library/Application Support/Scribroom/models/ggml-small-q5_1.bin" \
  cargo test real_whisper_model_processes_local_audio -- --ignored

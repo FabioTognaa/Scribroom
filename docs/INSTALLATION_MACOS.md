@@ -12,8 +12,8 @@ installare:
 ## 1. Clonazione e installazione
 
 ```sh
-git clone https://github.com/FabioTognaa/scrib.git
-cd scrib
+git clone https://github.com/FabioTognaa/Scribroom.git
+cd Scribroom
 cargo install --path .
 ```
 
@@ -38,10 +38,10 @@ default. È possibile scaricarli tramite i comandi elencati qui sotto.
 Scaricare il modello predefinito nella cartella dati:
 
 ```sh
-mkdir -p "$HOME/Library/Application Support/Scrib/models"
+mkdir -p "$HOME/Library/Application Support/Scribroom/models"
 curl -fL \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin \
-  -o "$HOME/Library/Application Support/Scrib/models/ggml-large-v3-turbo-q8_0.bin"
+  -o "$HOME/Library/Application Support/Scribroom/models/ggml-large-v3-turbo-q8_0.bin"
 ```
 
 Per un modello più leggero c'è `small`:
@@ -49,7 +49,7 @@ Per un modello più leggero c'è `small`:
 ```sh
 curl -fL \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin \
-  -o "$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin"
+  -o "$HOME/Library/Application Support/Scribroom/models/ggml-small-q5_1.bin"
 ```
 
 ### Scelta del modello

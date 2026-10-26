@@ -391,7 +391,7 @@ mod tests {
     #[test]
     fn data_directory_check_reports_paths_without_creating_them() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
-        let data = temporary.path().join("Scrib");
+        let data = temporary.path().join("Scribroom");
         let dirs = crate::paths::resolve(crate::paths::Sources {
             default_root: &data,
             sessions_flag: None,
