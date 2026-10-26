@@ -66,7 +66,7 @@ Se la frequenza non è 16 kHz, un ricampionamento lineare cambia il numero di ca
 La segmentazione qui non avviene in tempo reale. Attualmente, per un file mp4 di 90m, vengono impiegati all'incirca 30m di trascrizione.
 Ogni chunk viene scritto e processato da Whisper alla massima velocità.
 
-Una volta conclusa la trascrizione nasce una cartella nuova sotto `sessions/` (stesso nome `YY-MM-DD` di `start`) con dentro solo `<nome>.txt`. Non nasce nessuna sessione: nessun audio viene conservato, nessun `session.json` e nessun transcript canonico JSONL esportabile. Il Markdown resta ottenibile con `export --format markdown` su una sessione di `start`.
+Una volta conclusa la trascrizione nasce una cartella nuova nella cartella sessioni (stesso nome `YY-MM-DD` di `start`) con dentro solo `<nome>.txt`. Non nasce nessuna sessione: nessun audio viene conservato, nessun `session.json` e nessun transcript canonico JSONL esportabile. Il Markdown resta ottenibile con `export --format markdown` su una sessione di `start`.
 [DA MIGLIORARE]
 
 ## Il flusso, dall'inizio alla fine
@@ -77,7 +77,7 @@ Una volta conclusa la trascrizione nasce una cartella nuova sotto `sessions/` (s
    letto dal loop, non un'uscita immediata.
 2. Verifica lingua, parametri di inferenza e che il file del modello esista.
 3. Calcola il SHA-256 del modello e carica Whisper in memoria, con GPU accesa.
-4. Prende un lock esclusivo su `sessions/.runner.lock`. Un secondo `start` nella
+4. Prende un lock esclusivo su `<cartella sessioni>/.runner.lock`. Un secondo `start` nella
    stessa directory fallisce finché il primo è vivo. Se il processo precedente è
    morto, il lock del sistema operativo si libera da solo.
 5. Se `current-session.json` punta a una sessione ancora `starting`, `running`,
@@ -89,7 +89,7 @@ Una volta conclusa la trascrizione nasce una cartella nuova sotto `sessions/` (s
    cattura live non ha questi tetti, perché non tiene l'intero audio in RAM.
 7. Controlla lo spazio disco. Per un WAV stima i byte della sessione. Per la live
    pretende almeno 64 MiB liberi, e ricontrolla ogni 5 secondi.
-8. Crea la directory `sessions/YY-MM-DD/` (giorno locale di inizio) e i file
+8. Crea la directory `<cartella sessioni>/YY-MM-DD/` (giorno locale di inizio) e i file
    vuoti. Lo stato passa a `running` solo dopo che il worker ASR è partito. Se
    quell'avvio fallisce, la sessione viene chiusa come `failed` con i WAV finalizzati,
    anche se sono ancora a zero campioni.
@@ -210,7 +210,7 @@ non un sottotitolo istantaneo.
 
 ## Whisper
 
-Il progetto si appoggia a `whisper-rs` per usare whisper.cpp in locale. Fa girare uno dei modelli che si trovano in `models/`, caricati in memoria una volta sola quando il programma viene inizializzato. Il suo compito è tradurre in testo i campioni che il VAD gli passa come PCM float mono a 16 kHz.
+Il progetto si appoggia a `whisper-rs` per usare whisper.cpp in locale. Fa girare uno dei modelli che si trovano nella cartella modelli (`~/Library/Application Support/Scrib/models/` su macOS), caricati in memoria una volta sola quando il programma viene inizializzato. Il suo compito è tradurre in testo i campioni che il VAD gli passa come PCM float mono a 16 kHz.
 
 1. Viene validata la config di inferenza: numero di thread, strategia di decodifica, ampiezza del fascio, temperatura e prompt devono essere coerenti fra loro; Core ML viene rifiutato se il binario non è stato compilato per supportarlo.
 2. Il file GGML viene aperto e i pesi caricati in memoria, con la GPU accesa (Metal su Apple Silicon) e la flash attention attiva salvo disattivazione esplicita. Il contesto resta vivo per tutta la sessione e viene riusato da ogni segmento.
@@ -288,7 +288,7 @@ esce da quella directory viene rifiutato.
 ## I file di una sessione
 
 ```text
-sessions/YY-MM-DD/
+<cartella sessioni>/YY-MM-DD/
   session.json        chi, quando, con quale configurazione
   status.json         fotografia aggiornata mentre gira, e stato finale
   events.jsonl        avvio, pause, riprese, stop, timeout di silenzio, errori
