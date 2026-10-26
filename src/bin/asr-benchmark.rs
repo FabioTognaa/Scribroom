@@ -4,9 +4,9 @@ use std::process::Command;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::Parser;
-use personal_transcriber::asr::{AsrEngine, WhisperEngine, model_identity, sha256_file};
-use personal_transcriber::audio::FileAudioSource;
-use personal_transcriber::domain::{
+use scrib::asr::{AsrEngine, WhisperEngine, model_identity, sha256_file};
+use scrib::audio::FileAudioSource;
+use scrib::domain::{
     InferenceConfig, InferenceStrategy, SpeechSegment, TARGET_SAMPLE_RATE_HZ, TimestampUs,
     default_threads,
 };
@@ -116,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         coreml: args.coreml,
         prompt: args.prompt.clone(),
         context_enabled: false,
-        context_window_chars: personal_transcriber::domain::default_context_window_chars(),
+        context_window_chars: scrib::domain::default_context_window_chars(),
     };
     let identity = model_identity(&args.model)?;
     let source = FileAudioSource::open(&args.input)?;

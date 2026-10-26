@@ -57,19 +57,16 @@ mod tests {
 
     #[test]
     fn session_paths_follow_the_canonical_layout() {
-        let paths = SessionPaths::new("/tmp/personal-transcriber/session-1");
+        let paths = SessionPaths::new("/tmp/scrib/session-1");
 
         assert_eq!(
             paths.metadata,
-            PathBuf::from("/tmp/personal-transcriber/session-1/session.json")
+            PathBuf::from("/tmp/scrib/session-1/session.json")
         );
         assert_eq!(
             paths.transcript,
-            PathBuf::from("/tmp/personal-transcriber/session-1/transcript.jsonl")
+            PathBuf::from("/tmp/scrib/session-1/transcript.jsonl")
         );
-        assert_eq!(
-            paths.audio,
-            PathBuf::from("/tmp/personal-transcriber/session-1/audio")
-        );
+        assert_eq!(paths.audio, PathBuf::from("/tmp/scrib/session-1/audio"));
     }
 }

@@ -20,6 +20,12 @@ progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
   ferma durante `pause`, registra l'evento `silence_timeout` e lascia la sessione
   `completed`. La chiusura automatica è annunciata su stderr in inglese.
 
+### Changed
+
+- Il prodotto si chiama `scrib`: cambiano package, libreria, binario e il comando
+  da lanciare. Il vecchio comando non esiste più, senza alias. Il test che usa un
+  modello reale legge ora `SCRIB_MODEL`.
+
 ## [1.0.0] - 2026-10-13
 
 ### Added

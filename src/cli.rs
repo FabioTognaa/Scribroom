@@ -14,7 +14,7 @@ const DOCTOR_PROBE_DURATION: std::time::Duration = std::time::Duration::from_sec
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "personal-transcriber",
+    name = "scrib",
     version,
     about = "Record and transcribe live meetings locally"
 )]
@@ -744,13 +744,8 @@ mod tests {
 
     #[test]
     fn start_defaults_to_italian() {
-        let cli = Cli::try_parse_from([
-            "personal-transcriber",
-            "start",
-            "--model",
-            "models/fixture.bin",
-        ])
-        .expect("start command should parse");
+        let cli = Cli::try_parse_from(["scrib", "start", "--model", "models/fixture.bin"])
+            .expect("start command should parse");
 
         let Command::Start(args) = cli.command else {
             panic!("expected start command");
@@ -763,15 +758,15 @@ mod tests {
 
     #[test]
     fn sessions_dir_flag_is_optional_and_accepted() {
-        let cli = Cli::try_parse_from(["personal-transcriber", "status"])
-            .expect("status without a flag should parse");
+        let cli =
+            Cli::try_parse_from(["scrib", "status"]).expect("status without a flag should parse");
         let Command::Status(args) = cli.command else {
             panic!("expected status command");
         };
         assert_eq!(args.sessions_dir, None);
 
         let cli = Cli::try_parse_from([
-            "personal-transcriber",
+            "scrib",
             "status",
             "--sessions-dir",
             "/Volumes/external/sessions",
@@ -788,8 +783,7 @@ mod tests {
 
     #[test]
     fn start_defaults_to_the_large_v3_turbo_model_preset() {
-        let cli = Cli::try_parse_from(["personal-transcriber", "start"])
-            .expect("start command should parse");
+        let cli = Cli::try_parse_from(["scrib", "start"]).expect("start command should parse");
 
         let Command::Start(args) = cli.command else {
             panic!("expected start command");
@@ -807,13 +801,8 @@ mod tests {
 
     #[test]
     fn start_accepts_a_model_preset() {
-        let cli = Cli::try_parse_from([
-            "personal-transcriber",
-            "start",
-            "--model-preset",
-            "large-v3-turbo",
-        ])
-        .expect("start command should parse");
+        let cli = Cli::try_parse_from(["scrib", "start", "--model-preset", "large-v3-turbo"])
+            .expect("start command should parse");
 
         let Command::Start(args) = cli.command else {
             panic!("expected start command");
@@ -832,7 +821,7 @@ mod tests {
     #[test]
     fn explicit_model_path_overrides_the_preset() {
         let cli = Cli::try_parse_from([
-            "personal-transcriber",
+            "scrib",
             "start",
             "--model-preset",
             "large-v3",
@@ -939,19 +928,14 @@ mod tests {
 
     #[test]
     fn silence_timeout_defaults_to_fifteen_minutes_and_only_accepts_one_to_thirty() {
-        let cli = Cli::try_parse_from([
-            "personal-transcriber",
-            "start",
-            "--model",
-            "models/fixture.bin",
-        ])
-        .expect("start command should parse");
+        let cli = Cli::try_parse_from(["scrib", "start", "--model", "models/fixture.bin"])
+            .expect("start command should parse");
         let Command::Start(args) = cli.command else {
             panic!("expected start command");
         };
         assert_eq!(args.silence_timeout, 15);
 
-        let cli = Cli::try_parse_from(["personal-transcriber", "start", "--silence-timeout", "30"])
+        let cli = Cli::try_parse_from(["scrib", "start", "--silence-timeout", "30"])
             .expect("30 minutes should be accepted");
         let Command::Start(args) = cli.command else {
             panic!("expected start command");
@@ -960,8 +944,7 @@ mod tests {
 
         for value in ["0", "31", "-1", "1.5", "abc"] {
             assert!(
-                Cli::try_parse_from(["personal-transcriber", "start", "--silence-timeout", value])
-                    .is_err(),
+                Cli::try_parse_from(["scrib", "start", "--silence-timeout", value]).is_err(),
                 "{value} must be rejected"
             );
         }
@@ -970,7 +953,7 @@ mod tests {
     #[test]
     fn start_accepts_english() {
         let cli = Cli::try_parse_from([
-            "personal-transcriber",
+            "scrib",
             "start",
             "--model",
             "models/fixture.bin",
@@ -988,14 +971,8 @@ mod tests {
 
     #[test]
     fn export_format_parses_from_cli() {
-        let cli = Cli::try_parse_from([
-            "personal-transcriber",
-            "export",
-            "sessions/example",
-            "--format",
-            "vtt",
-        ])
-        .expect("export command should parse");
+        let cli = Cli::try_parse_from(["scrib", "export", "sessions/example", "--format", "vtt"])
+            .expect("export command should parse");
 
         let Command::Export(args) = cli.command else {
             panic!("expected export command");
@@ -1007,7 +984,7 @@ mod tests {
     #[test]
     fn transcribe_input_path_is_optional() {
         let cli = Cli::try_parse_from([
-            "personal-transcriber",
+            "scrib",
             "transcribe",
             "input.mp3",
             "--model",
@@ -1019,13 +996,8 @@ mod tests {
         };
         assert_eq!(args.input, Some(PathBuf::from("input.mp3")));
 
-        let cli = Cli::try_parse_from([
-            "personal-transcriber",
-            "transcribe",
-            "--model",
-            "models/fixture.bin",
-        ])
-        .expect("transcribe without a path should parse");
+        let cli = Cli::try_parse_from(["scrib", "transcribe", "--model", "models/fixture.bin"])
+            .expect("transcribe without a path should parse");
         let Command::Transcribe(args) = cli.command else {
             panic!("expected transcribe command");
         };
@@ -1035,7 +1007,7 @@ mod tests {
     #[test]
     fn vad_and_context_flags_wire_into_their_configs() {
         let cli = Cli::try_parse_from([
-            "personal-transcriber",
+            "scrib",
             "transcribe",
             "input.mp3",
             "--model",
@@ -1080,14 +1052,14 @@ mod tests {
     fn unreasonable_vad_durations_are_rejected() {
         for args in [
             [
-                "personal-transcriber",
+                "scrib",
                 "transcribe",
                 "input.mp3",
                 "--vad-pre-roll-ms",
                 "6000",
             ],
             [
-                "personal-transcriber",
+                "scrib",
                 "transcribe",
                 "input.mp3",
                 "--vad-max-segment-ms",

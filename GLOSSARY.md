@@ -1,4 +1,4 @@
-# Personal Transcriber
+# Scrib
 
 Applicazione locale per registrare riunioni, trascriverle e conservare il risultato sul disco dell'utente. Il contesto copre una sola area: la cattura audio, la trascrizione e gli artefatti che ne derivano.
 
