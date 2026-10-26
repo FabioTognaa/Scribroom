@@ -27,16 +27,16 @@ Dalla root del progetto, scaricare il modello predefinito:
 ```sh
 mkdir -p models
 curl -fL \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin \
-  -o models/ggml-small-q5_1.bin
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin \
+  -o models/ggml-large-v3-turbo-q8_0.bin
 ```
 
-Per scaricare l'altro modello presente, `large-v3-turbo`:
+Per un modello più leggero c'è `small`:
 
 ```sh
 curl -fL \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin \
-  -o models/ggml-large-v3-turbo-q8_0.bin
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin \
+  -o models/ggml-small-q5_1.bin
 ```
 
 ### Scelta del modello
@@ -47,7 +47,7 @@ file `.bin` presenti in `models/`; si può selezionare quello con cui si desider
 Consiglio caldamente di usare `large-v3-turbo` per la trascrizione, la qualità del prodotto finale è superiore, anche se richiede un effort più imposrtante lato processore e memoria.
 
 `--model-preset` è il flag da accompagnare a `start` che consente di selezionare un modello specifico tra quelli documentati senza scrivere percorsi.
-Il valore predefinito è `small`; come detto poco fa, consiglio di usare il modello `large-v3-turbo` per avere il miglior compromesso tra accuratezza e velocità.
+Il valore predefinito è `large-v3-turbo`; `small` resta l'opzione leggera per macchine con poca memoria.
 
 Un file GGML qualsiasi siseleziona con `--model <percorso>`, che ha la precedenza sul preset.
 

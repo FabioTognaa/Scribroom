@@ -1,38 +1,121 @@
-3. Problema B — la conversione 48→16 nel file registrato (nostro codice)
+PROSSIMI PASSI: VERSO PRIMI UTENTI E OLTRE
 
-Sui recording reali in `sessions/` ho misurato un difetto vero, indipendente dal
-problema A:
+====================================================================
+A. BLOCCANTI TECNICI (in ordine, ognuno sblocca il successivo)
+====================================================================
 
-- Il graffio/artefatto sta solo nel canale di sistema (`system.wav`): il microfono
-  è pulito (0 salti), il mix li eredita.
-- Con sorgenti a 48 kHz e target 16 kHz il rapporto è esattamente 3, e il nostro
-  Normalizer in quel caso prende un campione ogni tre senza alcun filtro.
-- Ho riprodotto l'algoritmo: un tono a 9 kHz esce a 7 kHz, a 11 kHz esce a 5 kHz,
-  a 15 kHz esce a 1 kHz, a piena ampiezza. Cioè tutto il contenuto sopra 8 kHz
-  (sibilanti forti, tasti, notifiche, musica del far-end) viene ripiegato nella
-  banda udibile: è il "graffio".
+1. PERCORSI ASSOLUTI + CONFIG
+   Oggi modelli e sessioni sono relativi alla directory corrente
+   (`MODELS_DIR = "models"` in src/model.rs:14, `default_value = "sessions"`
+   in src/cli.rs:37). Installato il binario, l'app cerca i file nel posto
+   sbagliato.
+   - dati in ~/Library/Application Support/<nome-prodotto>/{models,sessions}
+   - ordine di risoluzione: flag > config > default assoluto
+   - fallback alla cwd solo per la dev mode
+   Fatto quando: `personal-transcriber start` funziona da qualsiasi
+   directory, sia dal binario installato sia da `cargo run`.
 
+2. NOME DEL PRODOTTO + BUNDLE ID
+   Non è design: decide bundle ID, permesso TCC, cartella dati, firma.
+   Deciderlo dopo i percorsi significa migrare i dati degli utenti.
+   `personal-transcriber` resta il nome del crate.
+   Fatto quando: esiste un nome, un bundle ID (com.<autore>.<nome>) e la
+   cartella dati definitiva.
 
-• nuova feature: nel menù di start viene chiesto il nome della repo della registrazione:
-- la struttura del nuovo nome sarà "YY-MM-DD_nome_della_repo": il nome della repo viene appunto passato in input
-- la richiesta del nome avviene - ribadisco - nel menù dello start prima del nome in input dalla cli
-- se contiene spazi questi vengono rimpiazzati automaticamente con '_'
-- se contiene caratteri non validi (es. / : * ? " < > |) viene segnalato che il nome non puo essere usato e si ripropone il menù per riscrivere un altro nome
-- se in /session c'è già una cartella con il nome scritto viene segnalato e chiesto un altro nome
-- durante la scrittura del nome, come per la scelta del modello, se si digita 'q' e si invia si quitta il comando start
-- dopo il nome accettabile deve venire chiesto il modello esattamente come ora
+3. CHI POSSIEDE LA SESSIONE
+   L'app (a) lancia il binario come sidecar e legge i file di sessione,
+   oppure (b) linka la lib Rust? Sono due architetture diverse.
+   Da dichiarare prima di scrivere la UI, perché cambia tutto a valle.
 
+4. MODELLO: SOLO LARGE-V3-TURBO
+   - scaricato al PRIMO AVVIO dell'app, non dentro il pacchetto
+     (834 MB: nel .dmg significherebbe 834 MB da scaricare prima di poter
+     aprire l'app, e ri-caricarli a ogni release)
+   - verifica SHA-256 con la tabella già presente in src/model.rs, hash
+     in cache per non ricalcolare 834 MB a ogni avvio
+   - `--model <percorso>` resta come escape hatch
+   - caricato in RAM all'avvio di ogni trascrizione (comportamento già
+     attuale, non cambia)
+   - rimuovere la macchina dei preset: `ModelPreset`, `ModelPick` e il
+     menu interattivo in src/cli.rs (è codice morto con la GUI)
+   Fatto quando: `start` senza flag scarica (se manca), verifica e usa
+   turbo; nessun prompt di scelta modello.
 
-• feature inattività: se si registra silenzio consecutivo per oltre un minutaggio prestabilito si chiude la sessione in automatico
-- riservata a start
-- il valore del minutaggio è selezionabile tramite flag --silence-timeout dedicato per ogni sessione
-- vincoli dei valori assegnabili al flag: numero (da intendere in minuti) intero compreso tra 1 e 30; valore di default: 15
+5. INSTALLAZIONE NON-DEV (priorità: pubblico tecnico)
+   - script `curl | sh`: uname -m, download tarball della release,
+     `shasum -a 256 -c`, install in `$(brew --prefix)/bin` se brew c'è,
+     altrimenti /usr/local/bin con sudo. Nessuna modifica al PATH.
+   - tap Homebrew (formula): un file, gratis.
+   - NIENTE .dmg per ora: senza firma è inutilizzabile (vedi punto 12).
+   - curl non applica la quarantena, il binario è già firmato ad-hoc:
+     nessun avviso Gatekeeper.
+   Fatto quando: su un Mac Apple Silicon pulito, senza repo clonata,
+   `curl … | sh` seguito da `start` produce una trascrizione.
 
+====================================================================
+B. PRODOTTO E DISTRIBUZIONE
+====================================================================
 
-• test rosso in CI: `inference_failure_stops_capture_and_marks_the_session_failed` (tests/session_lifecycle.rs)
-- cosa fa: avvia una sessione con il sink finto `FailingAcceptSink`, che al primo segmento restituisce `Error::Asr("intentional inference failure")`
-- cosa verifica: che `run_with_sink` si fermi restituendo esattamente quell'errore, che lo stato sia `Failed` e che l'audio sia già su disco
-- cosa succede: fallisce in CI sull'assert alla riga 260 (`matches!(error, Error::Asr(message) if message == "intentional inference failure")`): l'errore che arriva non è quello atteso (variante o messaggio diverso)
-- sospetto: `run_with_sink` incapsula/sostituisce l'errore del sink prima di propagarlo, oppure il test è troppo rigido sul messaggio esatto; da riprodurre in locale per leggere l'errore reale
-- il test gemello `startup_failure_finalizes_files_and_marks_the_session_failed` passa perché controlla solo `Error::Asr(_)`, senza il messaggio
-- è questo, non il formatter, a rendere rosse tutte le run recenti (main, v1.0.0, dev/*): Format e Lint passano, si ferma Test
+6. BRANDBOOK MINIMO
+   Una pagina, non un PDF: nome, una frase che dice cosa fa, icona, due
+   font, tre colori, tono di voce. Prima del sito, perché il nome
+   finisce ovunque.
+
+7. SITO + DOCS
+   Landing page statica (Astro) su GitHub Pages/Cloudflare:
+   - cosa fa il prodotto, punti di forza (locale, privacy, nessun cloud)
+   - sezione installazione: per ora script curl + brew, il .dmg quando
+     ci sarà la firma
+   - sezione documentazione GENERATA dai markdown in docs/, non
+     riscritta: una sola fonte di verità
+
+8. APP TAURI
+   Shell cross-platform sopra il core Rust (stesso schema di Foresight:
+   shell + core nativo), niente browser né server locale.
+   Primo giro: sola lettura delle sessioni esistenti (lista, dettaglio,
+   export). Poi il live.
+   Il binario viaggia come sidecar dentro .app/Contents/MacOS/, quindi
+   l'utente finale non installa niente e non tocca il PATH.
+
+9. CORE AUDIO TAPS (sostituisce BlackHole)
+   Da fare DOPO lo scheletro dell'app con bundle ID: il permesso TCC
+   viene attribuito a chi chiama l'API, se lo sviluppi dal CLI il
+   permesso lo prende il Terminale e poi va ri-concesso.
+   - macOS 14.4+, `AudioHardwareCreateProcessTap` (API ObjC →
+     objc2 o helper Swift)
+   - serve `NSAudioCaptureUsageDescription` in Info.plist (non serve
+     entitlement fuori dal sandbox: le app Tauri non sono sandboxed)
+   - aggregate device tap + uscita corrente = senti e registri insieme
+   - BlackHole resta come fallback documentato sotto 14.4
+   - NON impacchettare BlackHole: è GPLv3
+   Da fare PRIMA un grilling per fissare: chi cattura, comportamento
+   sotto 14.4, convivenza col fallback, cambio cuffie a sessione attiva,
+   identità del permesso TCC.
+   Fatto quando: una call su Zoom/Meet viene trascritta senza driver
+   installati e senza toccare Audio MIDI Setup.
+
+10. ALTRI MODELLI (dopo, non ora)
+    Il modello diventa un elenco selezionabile dall'app, con download
+    on-demand. Rimandato finché turbo non è stabile per settimane.
+
+====================================================================
+C. VINCOLI E GATE
+====================================================================
+
+11. DEV MODE INVARIATA
+    `cargo run --release -- …` continua a funzionare per lo sviluppo.
+
+12. FIRMA E NOTARIZZAZIONE — GATE DI LANCIO DELL'APP
+    Non è un'appendice: senza firma un .app scaricato da Safari non si
+    apre ("danneggiato") e non esiste workaround decente per un utente
+    non tecnico. Apple Developer Program 99 $/anno + hardened runtime +
+    notarytool + stapler, automatizzabile in GitHub Actions.
+    Oggi si rimanda perché non c'è ancora un .app da distribuire.
+    Da fare PRIMA del primo utente consumer, non dopo.
+    Nel frattempo: script curl (nessuna quarantena) e brew tap.
+
+====================================================================
+NOTE
+====================================================================
+- Cancellare todos/TODOS.txt.save se è un residuo dell'editor (0 byte).
+- Sotto 14.4 e senza BlackHole: solo microfono + trascrizione da file.

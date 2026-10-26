@@ -26,7 +26,7 @@ In ogni cartella si possono trovare:
   cartella nella quale vengono salvati 3 file in formato .wav, che rappresentano la tracce audio di microfono, sistema dal quale blackhole riceve il segnale in output, ed una traccia con questi 2 canali mixati
 
 - ### control.json:
-  un file di log di tutti i comandi di controllo del trascriber che vengono passati una volta che il programma è in esecuzione
+  la richiesta di controllo in attesa (`pause`, `resume` o `stop`); viene consumata e cancellata dopo l'applicazione. Lo storico dei comandi è in `events.jsonl`
 
 - ### session.json:
   file di metadati dell'intera sessione

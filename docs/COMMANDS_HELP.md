@@ -73,6 +73,10 @@ Preset e file documentati:
 | `large-v3-turbo` | `models/ggml-large-v3-turbo-q8_0.bin` | ~874 MB    |
 | `large-v3`       | `models/ggml-large-v3-q5_0.bin`       | ~1,1 GB    |
 
+Il percorso `models/` è relativo alla directory da cui lanci il comando: dopo
+`cargo install`, esegui dalla root del clone oppure passa `--model` con un
+percorso assoluto.
+
 ### Segmentazione vocale (VAD)
 
 Flag per impsotare i timing del riconscimento vocale, di seguito le impostazioni di default:
@@ -257,8 +261,9 @@ comandi di controllo sono rifiutati.
 personal-transcriber export <SESSIONE> [opzioni]
 ```
 
-Rilegge il file `transcript.jsonl` di una sessione e restituisce il testo in formato .txt e .md su console, senza
-modificarlo. Rifiuta come destinazione qualsiasi file canonico della sessione.
+Rilegge il file `transcript.jsonl` di una sessione e lo converte in jsonl,
+testo, Markdown, SRT o VTT, su console o su file con `-o`, senza modificarlo.
+Rifiuta come destinazione qualsiasi file canonico della sessione.
 
 | Argomento/Opzione           | Tipo     | Default         | Descrizione                                                                 |
 | --------------------------- | -------- | --------------- | --------------------------------------------------------------------------- |

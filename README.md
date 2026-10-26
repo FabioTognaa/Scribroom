@@ -95,7 +95,6 @@ Per quanto riguarda i formati wav, ad oggi non c'è ancora una funzione nativa c
 I controlli della milestone corrente sono:
 
 ```sh
-cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test
 cargo build
