@@ -17,3 +17,8 @@ PROJECT_CONTEXT.md
 .env
 .env.*
 !.env.example
+
+# skill configuration
+.agents/
+/docs/agents/
+AGENTS.md
