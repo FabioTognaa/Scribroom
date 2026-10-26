@@ -719,13 +719,25 @@ fn resolve_model(
 }
 
 /// Resolve the data directories for a command that takes `--sessions-dir`:
-/// the platform data root, its optional `config.json`, and the flag.
-/// Commands without one (`devices`, `export`) never read the environment.
+/// the platform data root, the `SCRIB_DATA_DIR` development override, its
+/// optional `config.json`, and the flag. A set variable wins over the config,
+/// so the config file is not even read and a broken one cannot break the dev
+/// mode. Commands without one (`devices`, `export`) never read the environment.
 fn data_dirs(sessions_flag: Option<&Path>) -> Result<crate::paths::DataDirs> {
     let data = crate::paths::platform_data_root()?;
-    let home = crate::paths::home_directory()?;
-    let config = crate::paths::load_config(&data, &home)?;
-    Ok(crate::paths::resolve(&data, sessions_flag, config.as_ref()))
+    let environment = std::env::var_os(crate::paths::DATA_DIR_ENV).map(PathBuf::from);
+    let config = if environment.is_some() {
+        None
+    } else {
+        let home = crate::paths::home_directory()?;
+        crate::paths::load_config(&data, &home)?
+    };
+    Ok(crate::paths::resolve(
+        &data,
+        sessions_flag,
+        environment.as_deref(),
+        config.as_ref(),
+    ))
 }
 
 fn print_json(value: &impl serde::Serialize) -> Result<()> {
