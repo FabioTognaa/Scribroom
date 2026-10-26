@@ -12,13 +12,13 @@ A. BLOCCANTI TECNICI (in ordine, ognuno sblocca il successivo)
    - dati in ~/Library/Application Support/<nome-prodotto>/{models,sessions}
    - ordine di risoluzione: flag > config > default assoluto
    - fallback alla cwd solo per la dev mode
-   Fatto quando: `personal-transcriber start` funziona da qualsiasi
+   Fatto quando: `scrib start` funziona da qualsiasi
    directory, sia dal binario installato sia da `cargo run`.
 
 2. NOME DEL PRODOTTO + BUNDLE ID
    Non è design: decide bundle ID, permesso TCC, cartella dati, firma.
    Deciderlo dopo i percorsi significa migrare i dati degli utenti.
-   `personal-transcriber` resta il nome del crate.
+   `scrib` è il nome del prodotto, del crate e del binario.
    Fatto quando: esiste un nome, un bundle ID (com.<autore>.<nome>) e la
    cartella dati definitiva.
 

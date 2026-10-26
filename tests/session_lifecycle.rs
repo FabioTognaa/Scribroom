@@ -5,17 +5,15 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use personal_transcriber::Result;
-use personal_transcriber::control;
-use personal_transcriber::domain::{
+use scrib::Result;
+use scrib::control;
+use scrib::domain::{
     ControlAction, InferenceConfig, SegmenterConfig, SessionConfig, SessionEvent, SessionMetadata,
     SessionState, SessionStatus, SpeechSegment, TimestampUs,
 };
-use personal_transcriber::schema::{
-    CURRENT_SESSION_FILE, EVENTS_FILE, MIXED_AUDIO_FILE, SCHEMA_VERSION,
-};
-use personal_transcriber::session::{self, NullSegmentSink, SegmentSink, StartOptions};
-use personal_transcriber::storage::{CurrentSession, SessionStorage, atomic_write_json, read_json};
+use scrib::schema::{CURRENT_SESSION_FILE, EVENTS_FILE, MIXED_AUDIO_FILE, SCHEMA_VERSION};
+use scrib::session::{self, NullSegmentSink, SegmentSink, StartOptions};
+use scrib::storage::{CurrentSession, SessionStorage, atomic_write_json, read_json};
 
 const FIXTURE: &str = "tests/fixtures/m1_stream.wav";
 
@@ -47,9 +45,7 @@ struct FailingStartSink;
 
 impl SegmentSink for FailingStartSink {
     fn start(&mut self, _session_id: uuid::Uuid, _transcript_path: &Path) -> Result<()> {
-        Err(personal_transcriber::Error::Asr(
-            "intentional startup failure".to_owned(),
-        ))
+        Err(scrib::Error::Asr("intentional startup failure".to_owned()))
     }
 
     fn accept(&mut self, _segment: &SpeechSegment) -> Result<()> {
@@ -61,7 +57,7 @@ struct FailingAcceptSink;
 
 impl SegmentSink for FailingAcceptSink {
     fn accept(&mut self, _segment: &SpeechSegment) -> Result<()> {
-        Err(personal_transcriber::Error::Asr(
+        Err(scrib::Error::Asr(
             "intentional inference failure".to_owned(),
         ))
     }
@@ -216,7 +212,7 @@ fn shutdown_signal_finalizes_a_readable_partial_session() {
 
     assert!(matches!(
         error,
-        personal_transcriber::Error::SessionInterrupted(path) if path == root
+        scrib::Error::SessionInterrupted(path) if path == root
     ));
     assert_eq!(status.state, SessionState::Failed);
     assert!(status.audio_position < TimestampUs(1_200_000));
@@ -238,7 +234,7 @@ fn startup_failure_finalizes_files_and_marks_the_session_failed() {
     let report = control::status_report(&sessions_dir).expect("failed session should be readable");
     let status = control::current_status(&sessions_dir).expect("failed status should be readable");
 
-    assert!(matches!(error, personal_transcriber::Error::Asr(_)));
+    assert!(matches!(error, scrib::Error::Asr(_)));
     assert_eq!(status.state, SessionState::Failed);
     assert_eq!(
         wav_samples(&report.session_root.join("audio").join(MIXED_AUDIO_FILE)),
@@ -258,7 +254,7 @@ fn inference_failure_stops_capture_and_marks_the_session_failed() {
     let report = control::status_report(&sessions_dir).expect("failed session should be readable");
 
     assert!(
-        matches!(error, personal_transcriber::Error::Asr(message) if message == "intentional inference failure")
+        matches!(error, scrib::Error::Asr(message) if message == "intentional inference failure")
     );
     assert_eq!(report.runtime.state, SessionState::Failed);
     assert!(report.runtime.audio_position < TimestampUs(1_200_000));
@@ -366,7 +362,7 @@ fn pointer_to_session_without_metadata_is_discarded_on_start() {
 
     assert!(matches!(
         control::current_status(&sessions_dir),
-        Err(personal_transcriber::Error::IncompleteSession(_))
+        Err(scrib::Error::IncompleteSession(_))
     ));
 
     let new_root = run_without_asr(options(sessions_dir.clone())).expect("start should recover");
@@ -418,7 +414,7 @@ fn concurrent_pause_and_stop_cannot_falsely_acknowledge_stop() {
             Ok(SessionStatus {
                 state: SessionState::TranscriptionPaused,
                 ..
-            }) | Err(personal_transcriber::Error::InvalidControlState { .. })
+            }) | Err(scrib::Error::InvalidControlState { .. })
         ),
         "pause may precede stop or be rejected while the session stops, but cannot overwrite stop: {pause_result:?}"
     );

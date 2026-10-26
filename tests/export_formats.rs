@@ -1,11 +1,11 @@
 use std::fs;
 use std::path::Path;
 
-use personal_transcriber::domain::{
+use scrib::domain::{
     InferenceConfig, SessionConfig, SessionMetadata, SessionState, TimestampUs, TranscriptSegment,
 };
-use personal_transcriber::export::{self, Format};
-use personal_transcriber::schema::{SCHEMA_VERSION, SESSION_METADATA_FILE, TRANSCRIPT_FILE};
+use scrib::export::{self, Format};
+use scrib::schema::{SCHEMA_VERSION, SESSION_METADATA_FILE, TRANSCRIPT_FILE};
 use uuid::Uuid;
 
 const RAW_TEXT: &str = " Testo ASR  non corretto.";
@@ -66,7 +66,7 @@ fn partial_export_requires_explicit_opt_in() {
 
     assert!(matches!(
         export::export_session(&session, Format::Text, None, false),
-        Err(personal_transcriber::Error::InvalidExport(_))
+        Err(scrib::Error::InvalidExport(_))
     ));
     export::export_session(
         &session,
