@@ -4,7 +4,7 @@ I dati dell'app (sessioni, modelli, config) stanno in `~/Library/Application Sup
 
 L'ordine di risoluzione è flag > variabile `SCRIB_DATA_DIR` > config > default assoluto. La variabile d'ambiente esiste per la modalità sviluppo, non per l'utente finale, e per questo batte il config. Il config accetta solo percorsi assoluti o con `~`, perché un percorso relativo non ha un significato ovvio.
 
-Stato: solo flag e default sono in uso; la variabile e il config arrivano subito dopo, con lo stesso ordine.
+Stato: flag, variabile d'ambiente, config e default sono in uso.
 
 ## Considered Options
 

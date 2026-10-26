@@ -1,0 +1,39 @@
+---
+description: Documentation edits must be minimal, dense, and clear to a human
+alwaysApply: true
+---
+
+# Documentation edits
+
+Applies to README, `docs/`, CHANGELOG, ADRs, doc comments, and any `.md`/`.mdx` file.
+
+- Change only what the task needs. Do not rewrite, reformat, or "polish" unrelated text.
+- Prefer deleting a sentence to adding one. Prefer a bullet to a paragraph.
+- Every sentence must add a fact, a rule, or a step. Remove filler, repetition, and marketing.
+- Write for a human new to the project: short sentences, concrete nouns, one idea per paragraph.
+- Keep the file's language, tone, and structure. Match the surrounding docs.
+- Do not rename headings or anchors unless the task requires it: links may break.
+- Use an example only when it removes ambiguity. Keep examples runnable and minimal.
+- Do not document obvious code or repeat what the code already says.
+- When behavior changes, update the docs that mention it; do not add a new document.
+- Never invent commands, paths, or features. Check the code or ask.
+
+Avoid AI-speak: "seamlessly", "leverage", "robust", "comprehensive", "it's important to note", "in today's world".
+
+## Examples
+
+Bad:
+> Scrib is a powerful, modern, local-first solution that seamlessly leverages state-of-the-art AI to empower your workflow.
+
+Good:
+> Scrib records a meeting and transcribes it locally. Audio and text stay on your Mac.
+
+Bad:
+> ## Installation
+> First, make sure you have installed all the required prerequisites. Then...
+
+Good:
+> ## Install
+> ```sh
+> cargo install --path .
+> ```

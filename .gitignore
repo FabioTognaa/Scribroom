@@ -3,7 +3,6 @@
 
 # Local application data and recordings
 /sessions/*
-!/sessions/README.md
 /models/
 /todos/
 PROJECT_CONTEXT.md

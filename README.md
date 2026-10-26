@@ -56,10 +56,10 @@ Il modello viene fatto girare tramite **Whisper.cpp**, il motore del modello imp
 
 Il modello viene poi dato ad un thread worker, che a seconda del compito lo usa liberamente.
 
-- valida la --sessions-dir; prende il lock esclusivo sessions/.runner.lock (un solo start alla volta); recupera una sessione rimasta running da un crash precedente marcandola failed.
+- valida la --sessions-dir; prende il lock esclusivo `<cartella sessioni>/.runner.lock` (un solo start alla volta); recupera una sessione rimasta running da un crash precedente marcandola failed.
 - risolve la sorgente: microfono = input di default (o --microphone); sistema = BlackHole (o --system-audio); i due devono essere dispositivi diversi.
 - crea il Segmenter, controlla lo spazio disco (live: ≥ 64 MiB, ricontrollo ogni 5 s).
-- crea sessions/YY-MM-DD/ (giorno locale, \_2, \_3… se collide) con session.json, status.json, events.jsonl, transcript.jsonl, audio/{mixed,microphone,system}.wav.
+- crea `<cartella sessioni>/YY-MM-DD/` (giorno locale, \_2, \_3… se collide) con session.json, status.json, events.jsonl, transcript.jsonl, audio/{mixed,microphone,system}.wav.
 - sink.start() avvia il thread worker ASR (apre transcript.jsonl).
 - scrive l'evento session_started, stato running.
 
@@ -83,11 +83,32 @@ Per quanto riguarda i formati wav, ad oggi non c'è ancora una funzione nativa c
 - `transcribe` elabora un file alla volta e in un solo thread: nel formato
   leggero non esistono pause, ripresa o stato di avanzamento.
 
+## Dati e configurazione
+
+Sessioni, modelli e configurazione non stanno nella directory da cui lanci il
+comando, ma in una cartella dati per utente:
+`~/Library/Application Support/Scrib/` su macOS, con dentro `sessions/`,
+`models/` e un `config.json` opzionale.
+
+Il config sposta le due sottocartelle, con percorsi assoluti o che iniziano con
+`~`:
+
+```json
+{
+  "sessions_dir": "/Volumes/esterno/scrib/sessions",
+  "models_dir": "~/Documenti/modelli"
+}
+```
+
+Per lo sviluppo, `SCRIB_DATA_DIR` sposta l'intera cartella dati e batte il
+config; `SCRIB_DATA_DIR=.` riporta `sessions/` e `models/` nella directory
+corrente. La precedenza completa, il formato del config e gli errori sono in
+[Comandi e opzioni](docs/COMMANDS_HELP.md#cartella-dati-config-e-scrib_data_dir).
+
 ## Documentazione nel dettaglio
 
 - [Sezione aiuto per tutti i comandi](docs/COMMANDS_HELP.md)
 - [Funzionamento e architettura](docs/RELAZIONE.md)
-- [Come leggere una cartella di sessione](sessions/README.md)
 - [Storico delle modifiche](CHANGELOG.md)
 
 ## Sviluppo locale
@@ -108,7 +129,7 @@ Il test con un modello Whisper reale è ignorato per impostazione predefinita e
 richiede `SCRIB_MODEL`:
 
 ```sh
-SCRIB_MODEL=models/ggml-small-q5_1.bin \
+SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" \
   cargo test real_whisper_model_processes_local_audio -- --ignored
 ```
 

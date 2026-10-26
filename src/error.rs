@@ -14,6 +14,9 @@ pub enum Error {
         reason: String,
     },
 
+    #[error("invalid config {}: {reason}", path.display())]
+    InvalidConfig { path: PathBuf, reason: String },
+
     #[error(
         "insufficient disk space at {}: {available_bytes} bytes available, {required_bytes} required",
         path.display()

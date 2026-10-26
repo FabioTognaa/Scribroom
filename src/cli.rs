@@ -246,7 +246,7 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Doctor(args) => {
-            let dirs = data_dirs(args.sessions.sessions_dir.as_deref())?;
+            let dirs = crate::paths::data_dirs(args.sessions.sessions_dir.as_deref())?;
             let model = doctor_model_path(args.model.clone(), args.model_preset, &dirs.models);
             let report = if args.probe_audio {
                 crate::diagnostics::doctor_with_audio_probe(
@@ -267,7 +267,7 @@ pub fn execute(command: Command) -> Result<()> {
             }
         }
         Command::Start(args) => {
-            let dirs = data_dirs(args.sessions.sessions_dir.as_deref())?;
+            let dirs = crate::paths::data_dirs(args.sessions.sessions_dir.as_deref())?;
             let session_name = match select_session_name_interactively(&dirs.sessions) {
                 NamePick::Use(name) => Some(name),
                 NamePick::Skipped => None,
@@ -297,7 +297,7 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Transcribe(args) => {
-            let dirs = data_dirs(args.sessions.sessions_dir.as_deref())?;
+            let dirs = crate::paths::data_dirs(args.sessions.sessions_dir.as_deref())?;
             let session_name = match select_session_name_interactively(&dirs.sessions) {
                 NamePick::Use(name) => Some(name),
                 NamePick::Skipped => None,
@@ -329,12 +329,12 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Status(args) => {
-            let dirs = data_dirs(args.sessions_dir.as_deref())?;
+            let dirs = crate::paths::data_dirs(args.sessions_dir.as_deref())?;
             print_json(&crate::control::status_report(&dirs.sessions)?)?;
             Ok(())
         }
         Command::Pause(args) => {
-            let dirs = data_dirs(args.sessions_dir.as_deref())?;
+            let dirs = crate::paths::data_dirs(args.sessions_dir.as_deref())?;
             print_status(&crate::control::request(
                 &dirs.sessions,
                 ControlAction::Pause,
@@ -342,7 +342,7 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Resume(args) => {
-            let dirs = data_dirs(args.sessions_dir.as_deref())?;
+            let dirs = crate::paths::data_dirs(args.sessions_dir.as_deref())?;
             print_status(&crate::control::request(
                 &dirs.sessions,
                 ControlAction::Resume,
@@ -350,7 +350,7 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Stop(args) => {
-            let dirs = data_dirs(args.sessions_dir.as_deref())?;
+            let dirs = crate::paths::data_dirs(args.sessions_dir.as_deref())?;
             print_status(&crate::control::request(
                 &dirs.sessions,
                 ControlAction::Stop,
@@ -716,15 +716,6 @@ fn resolve_model(
         ModelPick::Use(path) => Some(path),
         ModelPick::Cancelled => None,
     })
-}
-
-/// Resolve the data directories for a command that takes `--sessions-dir`.
-/// Commands without one (`devices`, `export`) never read the environment.
-fn data_dirs(sessions_flag: Option<&Path>) -> Result<crate::paths::DataDirs> {
-    Ok(crate::paths::resolve(
-        &crate::paths::platform_data_root()?,
-        sessions_flag,
-    ))
 }
 
 fn print_json(value: &impl serde::Serialize) -> Result<()> {

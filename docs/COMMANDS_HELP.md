@@ -44,6 +44,45 @@ Disponibili su tutti i comandi.
 indirizzano una sessione (`start`, `doctor`, `transcribe`, `status`, `pause`,
 `resume`, `stop`). `devices` ed `export` non lo espongono.
 
+## Cartella dati, config e SCRIB_DATA_DIR
+
+`scrib` non scrive nella directory da cui lo lanci: sessioni e modelli stanno in
+una cartella dati per utente.
+
+```text
+~/Library/Application Support/Scrib/
+├── config.json      # opzionale, lo scrive l'utente
+├── sessions/        # una cartella per sessione o trascrizione
+└── models/          # file GGML di Whisper
+```
+
+Quello qui sopra è il percorso macOS; su Linux è `$XDG_DATA_HOME/Scrib/`, su
+Windows `%APPDATA%\Scrib\`.
+
+`config.json` è opzionale e sposta le due sottocartelle:
+
+```json
+{
+  "sessions_dir": "/Volumes/esterno/scrib/sessions",
+  "models_dir": "~/Documenti/modelli"
+}
+```
+
+- Le chiavi sono `sessions_dir` e `models_dir`, entrambe opzionali.
+- I percorsi devono essere assoluti o iniziare con `~`: un percorso relativo è un
+  errore, perché non avrebbe un significato ovvio.
+- Un JSON malformato o un file vuoto è un errore esplicito: `scrib` non riparte
+  in silenzio con i default.
+- Le chiavi sconosciute sono ignorate, così un config più nuovo non blocca una
+  versione più vecchia.
+- Se `config.json` non esiste non viene creato: valgono i default.
+
+La precedenza è: `--sessions-dir` > `SCRIB_DATA_DIR` > `config.json` > default.
+`SCRIB_DATA_DIR` sposta l'intera cartella dati e batte il config, che viene
+comunque letto e validato. Serve alla modalità sviluppo: per esempio
+`SCRIB_DATA_DIR=. scrib start` tiene `sessions/` e `models/` nella directory
+corrente, come faceva il vecchio layout dentro al repo.
+
 ## Opzioni condivise
 
 Alcune opzioni sono definite una volta e riusate su più comandi. Le opzioni del
@@ -66,12 +105,12 @@ avvia nulla.
 
 Preset e file documentati:
 
-| Preset           | File                                  | Dimensione |
+| Preset           | File nella cartella modelli            | Dimensione |
 | ---------------- | ------------------------------------- | ---------- |
-| `small`          | `models/ggml-small-q5_1.bin`          | ~190 MB    |
-| `medium`         | `models/ggml-medium-q5_0.bin`         | ~540 MB    |
-| `large-v3-turbo` | `models/ggml-large-v3-turbo-q8_0.bin` | ~874 MB    |
-| `large-v3`       | `models/ggml-large-v3-q5_0.bin`       | ~1,1 GB    |
+| `small`          | `ggml-small-q5_1.bin`                 | ~190 MB    |
+| `medium`         | `ggml-medium-q5_0.bin`                | ~540 MB    |
+| `large-v3-turbo` | `ggml-large-v3-turbo-q8_0.bin`        | ~874 MB    |
+| `large-v3`       | `ggml-large-v3-q5_0.bin`              | ~1,1 GB    |
 
 I modelli si cercano in `models/` dentro la cartella dati
 (`~/Library/Application Support/Scrib/models/` su macOS), non nella directory da
@@ -131,7 +170,7 @@ l'exit code è diverso da zero.
 | `--probe-audio`             | flag     | spento                  | Apre entrambi gli input live per tre secondi e verifica che arrivi segnale, senza creare una sessione. |
 | `--microphone <NOME>`       | testo    | input predefinito       | Microfono usato dal probe. Richiede `--probe-audio`.                                                   |
 | `--system-audio <NOME>`     | testo    | BlackHole               | Input di sistema usato dal probe. Richiede `--probe-audio`.                                            |
-| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions`              | Directory delle sessioni da verificare.                                                                |
+| `--sessions-dir <PERCORSO>` | percorso | `sessions_dir` del config, altrimenti `cartella dati/sessions`              | Directory delle sessioni da verificare.                                                                |
 
 Senza `--probe-audio`, permesso del microfono e routing reale restano non
 verificati e il report contiene un avviso.
@@ -155,7 +194,7 @@ scrib start [opzioni]
 | `--vad-start-ms <MS>`          | intero       | `60`               | Vedi “Segmentazione vocale”.         |
 | `--vad-end-ms <MS>`            | intero       | `1600`             | Vedi “Segmentazione vocale”.         |
 | `--asr-flash-attention <BOOL>` | booleano     | `true`             | Vedi “Inferenza”.                    |
-| `--sessions-dir <PERCORSO>`    | percorso     | `cartella dati/sessions`         | Directory in cui creare la sessione. |
+| `--sessions-dir <PERCORSO>`    | percorso     | `sessions_dir` del config, altrimenti `cartella dati/sessions`         | Directory in cui creare la sessione. |
 
 Con `--silence-timeout` la sessione si chiude da sola dopo N minuti consecutivi di
 silenzio. Il conteggio è in tempo audio e non si ferma con `pause`: vale la soglia
@@ -169,8 +208,8 @@ da 1–30 o non intero viene rifiutato da clap con un errore in inglese.
 scrib transcribe [FILE] [opzioni]
 ```
 
-Trascrive un file audio esistente, senza registrare e senza conservare audio: in
-`sessions/` nasce una cartella nuova (stesso nome `YY-MM-DD` di `start`) con dentro
+Trascrive un file audio esistente, senza registrare e senza conservare audio: nella
+cartella sessioni nasce una cartella nuova (stesso nome `YY-MM-DD` di `start`) con dentro
 solo `<nome>.txt`. Non sovrascrive mai nulla, perché la cartella è nuova; se la
 trascrizione fallisce non resta niente sul disco. Elabora un solo file per
 invocazione, in un unico thread. Se `FILE` è omesso, il percorso viene richiesto su
@@ -192,7 +231,7 @@ con `-v`.
 | `--vad-start-ms <MS>`          | intero       | `60`                                         | Vedi “Segmentazione vocale”.                   |
 | `--vad-end-ms <MS>`            | intero       | `1600`                                       | Vedi “Segmentazione vocale”.                   |
 | `--asr-flash-attention <BOOL>` | booleano     | `true`                                       | Vedi “Inferenza”.                              |
-| `--sessions-dir <PERCORSO>`    | percorso     | `cartella dati/sessions`                                   | Directory in cui creare la cartella di output. |
+| `--sessions-dir <PERCORSO>`    | percorso     | `sessions_dir` del config, altrimenti `cartella dati/sessions`                                   | Directory in cui creare la cartella di output. |
 
 I WAV passano dal lettore in memoria, quindi ereditano il limite di 64 MiB e 30
 minuti; gli altri formati sono decodificati in streaming e non hanno tale
@@ -214,7 +253,7 @@ file.
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `sessions_dir` del config, altrimenti `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `pause`
 
@@ -227,7 +266,7 @@ aperto e non attraversa l'intervallo sospeso. In questo modo la trascrizione sub
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `sessions_dir` del config, altrimenti `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `resume`
 
@@ -239,7 +278,7 @@ Riprende la trascrizione dopo una `pause`.
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `sessions_dir` del config, altrimenti `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `stop`
 
@@ -253,7 +292,7 @@ comandi di controllo sono rifiutati.
 
 | Opzione                     | Tipo     | Default    | Descrizione                                  |
 | --------------------------- | -------- | ---------- | -------------------------------------------- |
-| `--sessions-dir <PERCORSO>` | percorso | `cartella dati/sessions` | Directory che contiene la sessione corrente. |
+| `--sessions-dir <PERCORSO>` | percorso | `sessions_dir` del config, altrimenti `cartella dati/sessions` | Directory che contiene la sessione corrente. |
 
 ### `export`
 
@@ -284,7 +323,7 @@ Comandi da eseguire dalla radice del repository durante lo sviluppo.
 - `cargo build --release` — compila la build ottimizzata in `target/release/`.
 - `cargo run -- <comando>` — esegue il binario compilato senza installarlo, es. `cargo run -- devices`.
 - `cargo install --path .` — installa `scrib` nel sistema.
-- `SCRIB_MODEL=models/ggml-small-q5_1.bin cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
+- `SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" cargo test real_whisper_model_processes_local_audio -- --ignored` — esegue il test con un modello Whisper reale, ignorato per impostazione predefinita.
 - `cargo run --release --bin asr-benchmark -- <opzioni>` — esegue il benchmark ASR (opzioni in `benchmarks/README.md`).
 
 controlli della milestone corrente sono:
@@ -298,5 +337,5 @@ La build non ottimizzata finisce in target/debug/, quella ottimizzata in target/
 
 Il test con un modello Whisper reale è ignorato per impostazione predefinita e richiede SCRIB_MODEL:
 
-SCRIB_MODEL=models/ggml-small-q5_1.bin \
+SCRIB_MODEL="$HOME/Library/Application Support/Scrib/models/ggml-small-q5_1.bin" \
  cargo test real_whisper_model_processes_local_audio -- --ignored
