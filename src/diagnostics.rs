@@ -4,6 +4,7 @@ use std::time::Duration;
 use cpal::traits::{DeviceTrait, HostTrait};
 use serde::Serialize;
 
+use crate::paths::DataDirs;
 use crate::{Error, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -86,31 +87,31 @@ pub fn audio_devices() -> Result<DeviceInventory> {
     })
 }
 
-pub fn doctor(sessions_dir: &Path, model: &Path) -> DoctorReport {
-    doctor_internal(sessions_dir, model, None)
+pub fn doctor(dirs: &DataDirs, model: &Path) -> DoctorReport {
+    doctor_internal(dirs, model, None)
 }
 
 pub fn doctor_with_audio_probe(
-    sessions_dir: &Path,
+    dirs: &DataDirs,
     model: &Path,
     microphone: Option<&str>,
     system_audio: Option<&str>,
     duration: Duration,
 ) -> DoctorReport {
-    doctor_internal(
-        sessions_dir,
-        model,
-        Some((microphone, system_audio, duration)),
-    )
+    doctor_internal(dirs, model, Some((microphone, system_audio, duration)))
 }
 
 fn doctor_internal(
-    sessions_dir: &Path,
+    dirs: &DataDirs,
     model: &Path,
     audio_probe: Option<(Option<&str>, Option<&str>, Duration)>,
 ) -> DoctorReport {
-    let mut checks = vec![platform_check(), sessions_directory_check(sessions_dir)];
-    checks.push(disk_space_check(sessions_dir));
+    let mut checks = vec![
+        platform_check(),
+        data_directory_check(dirs),
+        sessions_directory_check(&dirs.sessions),
+    ];
+    checks.push(disk_space_check(&dirs.sessions));
     checks.push(model_check(model));
     checks.extend(device_checks());
     match audio_probe {
@@ -203,6 +204,25 @@ fn platform_check() -> DoctorCheck {
         },
         detail: format!(
             "{operating_system}/{architecture}; v1 requires macos/aarch64 (Apple Silicon)"
+        ),
+    }
+}
+
+/// Report the data directory in use. Never creates it: `start` and `transcribe`
+/// do that, so `doctor` stays read-only on a clean machine.
+fn data_directory_check(dirs: &DataDirs) -> DoctorCheck {
+    DoctorCheck {
+        name: "data_directory",
+        status: if dirs.data.is_dir() {
+            CheckStatus::Pass
+        } else {
+            CheckStatus::Warning
+        },
+        detail: format!(
+            "data {}; sessions {}; models {}",
+            dirs.data.display(),
+            dirs.sessions.display(),
+            dirs.models.display()
         ),
     }
 }
@@ -366,6 +386,21 @@ mod tests {
         assert!(is_blackhole("BlackHole 2ch"));
         assert!(is_blackhole("blackhole 16ch"));
         assert!(!is_blackhole("MacBook Pro Microphone"));
+    }
+
+    #[test]
+    fn data_directory_check_reports_paths_without_creating_them() {
+        let temporary = tempfile::tempdir().expect("temp directory should be created");
+        let data = temporary.path().join("Scrib");
+        let dirs = crate::paths::resolve(&data, None);
+
+        let check = data_directory_check(&dirs);
+
+        assert_eq!(check.status, CheckStatus::Warning);
+        assert!(check.detail.contains(&data.display().to_string()));
+        assert!(check.detail.contains(&dirs.sessions.display().to_string()));
+        assert!(check.detail.contains(&dirs.models.display().to_string()));
+        assert!(!data.exists(), "doctor must not create the data directory");
     }
 
     #[test]

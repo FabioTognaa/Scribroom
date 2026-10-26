@@ -32,9 +32,10 @@ pub struct Cli {
 /// ignore.
 #[derive(Debug, Args)]
 pub struct SessionsDirArgs {
-    /// Directory under which session directories are created.
-    #[arg(long, default_value = "sessions")]
-    pub sessions_dir: PathBuf,
+    /// Directory under which session directories are created. Defaults to the
+    /// sessions folder inside the data directory.
+    #[arg(long)]
+    pub sessions_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -245,17 +246,18 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Doctor(args) => {
-            let model = doctor_model_path(args.model.clone(), args.model_preset);
+            let dirs = data_dirs(args.sessions.sessions_dir.as_deref())?;
+            let model = doctor_model_path(args.model.clone(), args.model_preset, &dirs.models);
             let report = if args.probe_audio {
                 crate::diagnostics::doctor_with_audio_probe(
-                    &args.sessions.sessions_dir,
+                    &dirs,
                     &model,
                     args.microphone.as_deref(),
                     args.system_audio.as_deref(),
                     DOCTOR_PROBE_DURATION,
                 )
             } else {
-                crate::diagnostics::doctor(&args.sessions.sessions_dir, &model)
+                crate::diagnostics::doctor(&dirs, &model)
             };
             print_json(&report)?;
             if report.ready {
@@ -265,19 +267,21 @@ pub fn execute(command: Command) -> Result<()> {
             }
         }
         Command::Start(args) => {
-            let session_name = match select_session_name_interactively(&args.sessions.sessions_dir)
-            {
+            let dirs = data_dirs(args.sessions.sessions_dir.as_deref())?;
+            let session_name = match select_session_name_interactively(&dirs.sessions) {
                 NamePick::Use(name) => Some(name),
                 NamePick::Skipped => None,
                 NamePick::Cancelled => return Ok(()),
             };
-            let Some(model) = resolve_model(args.model.model, args.model.model_preset)? else {
+            let Some(model) =
+                resolve_model(args.model.model, args.model.model_preset, &dirs.models)?
+            else {
                 return Ok(());
             };
             let language = args.model.language;
             let prompt = resolve_initial_prompt(args.model.asr_prompt, &language);
             let root = crate::session::run(StartOptions {
-                sessions_dir: args.sessions.sessions_dir,
+                sessions_dir: dirs.sessions,
                 input_wav: None,
                 model: Some(model),
                 language,
@@ -293,8 +297,8 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Transcribe(args) => {
-            let session_name = match select_session_name_interactively(&args.sessions.sessions_dir)
-            {
+            let dirs = data_dirs(args.sessions.sessions_dir.as_deref())?;
+            let session_name = match select_session_name_interactively(&dirs.sessions) {
                 NamePick::Use(name) => Some(name),
                 NamePick::Skipped => None,
                 NamePick::Cancelled => return Ok(()),
@@ -306,7 +310,9 @@ pub fn execute(command: Command) -> Result<()> {
                     InputPick::Cancelled => return Ok(()),
                 },
             };
-            let Some(model) = resolve_model(args.model.model, args.model.model_preset)? else {
+            let Some(model) =
+                resolve_model(args.model.model, args.model.model_preset, &dirs.models)?
+            else {
                 return Ok(());
             };
             let language = args.model.language;
@@ -314,7 +320,7 @@ pub fn execute(command: Command) -> Result<()> {
             crate::transcribe::run(crate::transcribe::TranscribeOptions {
                 input,
                 model,
-                sessions_dir: args.sessions.sessions_dir,
+                sessions_dir: dirs.sessions,
                 language,
                 segmenter: segmenter_config(&args.vad),
                 inference: inference_config(&args.inference, prompt),
@@ -323,26 +329,30 @@ pub fn execute(command: Command) -> Result<()> {
             Ok(())
         }
         Command::Status(args) => {
-            print_json(&crate::control::status_report(&args.sessions_dir)?)?;
+            let dirs = data_dirs(args.sessions_dir.as_deref())?;
+            print_json(&crate::control::status_report(&dirs.sessions)?)?;
             Ok(())
         }
         Command::Pause(args) => {
+            let dirs = data_dirs(args.sessions_dir.as_deref())?;
             print_status(&crate::control::request(
-                &args.sessions_dir,
+                &dirs.sessions,
                 ControlAction::Pause,
             )?)?;
             Ok(())
         }
         Command::Resume(args) => {
+            let dirs = data_dirs(args.sessions_dir.as_deref())?;
             print_status(&crate::control::request(
-                &args.sessions_dir,
+                &dirs.sessions,
                 ControlAction::Resume,
             )?)?;
             Ok(())
         }
         Command::Stop(args) => {
+            let dirs = data_dirs(args.sessions_dir.as_deref())?;
             print_status(&crate::control::request(
-                &args.sessions_dir,
+                &dirs.sessions,
                 ControlAction::Stop,
             )?)?;
             Ok(())
@@ -409,14 +419,26 @@ fn inference_config(inference: &InferenceArgs, prompt: Option<String>) -> Infere
 
 /// Resolve the model from explicit arguments only (no interactive prompt).
 /// `--model` wins over `--model-preset`; `None` means "ask or use the default".
-fn resolve_model_path(model: Option<PathBuf>, preset: Option<ModelPreset>) -> Option<PathBuf> {
-    model.or_else(|| preset.map(ModelPreset::default_path))
+fn resolve_model_path(
+    model: Option<PathBuf>,
+    preset: Option<ModelPreset>,
+    models_dir: &Path,
+) -> Option<PathBuf> {
+    model.or_else(|| preset.map(|preset| preset.path_in(models_dir)))
 }
 
 /// Model `doctor` verifies when no flag is given: the same default `start` and
 /// `transcribe` resolve, so a green `doctor` checks the model you will run.
-fn doctor_model_path(model: Option<PathBuf>, preset: Option<ModelPreset>) -> PathBuf {
-    model.unwrap_or_else(|| preset.unwrap_or(ModelPreset::LargeV3Turbo).default_path())
+fn doctor_model_path(
+    model: Option<PathBuf>,
+    preset: Option<ModelPreset>,
+    models_dir: &Path,
+) -> PathBuf {
+    model.unwrap_or_else(|| {
+        preset
+            .unwrap_or(ModelPreset::LargeV3Turbo)
+            .path_in(models_dir)
+    })
 }
 
 struct ModelOption {
@@ -458,7 +480,7 @@ fn model_menu_options(models_dir: &Path) -> Vec<ModelOption> {
     let mut options: Vec<ModelOption> = ModelPreset::ALL
         .iter()
         .map(|preset| {
-            let path = preset.default_path();
+            let path = preset.path_in(models_dir);
             ModelOption {
                 label: preset
                     .to_possible_value()
@@ -521,40 +543,40 @@ enum ModelPick {
     Cancelled,
 }
 
-fn default_model() -> ModelPick {
-    ModelPick::Use(default_model_path())
+fn default_model(models_dir: &Path) -> ModelPick {
+    ModelPick::Use(default_model_path(models_dir))
 }
 
 /// Interactive model picker. Shown only on an interactive terminal and only when
 /// no model flag was given. Returns the `large-v3-turbo` preset on an empty answer.
-fn select_model_interactively() -> ModelPick {
+fn select_model_interactively(models_dir: &Path) -> ModelPick {
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
-        return default_model();
+        return default_model(models_dir);
     }
-    let options = model_menu_options(Path::new(crate::model::MODELS_DIR));
+    let options = model_menu_options(models_dir);
     print_model_menu(&options);
     let mut input = String::new();
     if std::io::stdin().read_line(&mut input).is_err() {
-        return default_model();
+        return default_model(models_dir);
     }
     match parse_menu_selection(&input, options.len()) {
-        MenuChoice::Default => default_model(),
+        MenuChoice::Default => default_model(models_dir),
         MenuChoice::Select(index) => ModelPick::Use(
             options
                 .get(index)
                 .map(|option| option.path.clone())
-                .unwrap_or_else(default_model_path),
+                .unwrap_or_else(|| default_model_path(models_dir)),
         ),
         MenuChoice::Custom => {
             print!("Percorso del modello (.bin): ");
             let _ = std::io::stdout().flush();
             let mut path = String::new();
             if std::io::stdin().read_line(&mut path).is_err() {
-                return default_model();
+                return default_model(models_dir);
             }
             let path = path.trim();
             if path.is_empty() {
-                default_model()
+                default_model(models_dir)
             } else {
                 ModelPick::Use(PathBuf::from(path))
             }
@@ -566,8 +588,8 @@ fn select_model_interactively() -> ModelPick {
     }
 }
 
-fn default_model_path() -> PathBuf {
-    ModelPreset::LargeV3Turbo.default_path()
+fn default_model_path(models_dir: &Path) -> PathBuf {
+    ModelPreset::LargeV3Turbo.path_in(models_dir)
 }
 
 /// Characters that make a session name unusable on any supported platform; the
@@ -682,14 +704,27 @@ fn select_input_path_interactively() -> Result<InputPick> {
 
 /// Resolve the ASR model: the `--model` flag or preset, otherwise the interactive
 /// picker. `Ok(None)` means the user cancelled the picker; the command exits cleanly.
-fn resolve_model(model: Option<PathBuf>, preset: Option<ModelPreset>) -> Result<Option<PathBuf>> {
-    if let Some(path) = resolve_model_path(model, preset) {
+fn resolve_model(
+    model: Option<PathBuf>,
+    preset: Option<ModelPreset>,
+    models_dir: &Path,
+) -> Result<Option<PathBuf>> {
+    if let Some(path) = resolve_model_path(model, preset, models_dir) {
         return Ok(Some(path));
     }
-    Ok(match select_model_interactively() {
+    Ok(match select_model_interactively(models_dir) {
         ModelPick::Use(path) => Some(path),
         ModelPick::Cancelled => None,
     })
+}
+
+/// Resolve the data directories for a command that takes `--sessions-dir`.
+/// Commands without one (`devices`, `export`) never read the environment.
+fn data_dirs(sessions_flag: Option<&Path>) -> Result<crate::paths::DataDirs> {
+    Ok(crate::paths::resolve(
+        &crate::paths::platform_data_root()?,
+        sessions_flag,
+    ))
 }
 
 fn print_json(value: &impl serde::Serialize) -> Result<()> {
@@ -723,7 +758,32 @@ mod tests {
 
         assert_eq!(args.model.language, "it");
         assert_eq!(args.model.model, Some(PathBuf::from("models/fixture.bin")));
-        assert_eq!(args.sessions.sessions_dir, PathBuf::from("sessions"));
+        assert_eq!(args.sessions.sessions_dir, None);
+    }
+
+    #[test]
+    fn sessions_dir_flag_is_optional_and_accepted() {
+        let cli = Cli::try_parse_from(["personal-transcriber", "status"])
+            .expect("status without a flag should parse");
+        let Command::Status(args) = cli.command else {
+            panic!("expected status command");
+        };
+        assert_eq!(args.sessions_dir, None);
+
+        let cli = Cli::try_parse_from([
+            "personal-transcriber",
+            "status",
+            "--sessions-dir",
+            "/Volumes/external/sessions",
+        ])
+        .expect("an explicit sessions directory should parse");
+        let Command::Status(args) = cli.command else {
+            panic!("expected status command");
+        };
+        assert_eq!(
+            args.sessions_dir,
+            Some(PathBuf::from("/Volumes/external/sessions"))
+        );
     }
 
     #[test]
@@ -735,12 +795,13 @@ mod tests {
             panic!("expected start command");
         };
 
+        let models_dir = Path::new("/data/Scrib/models");
         assert_eq!(args.model.model, None);
         assert_eq!(args.model.model_preset, None);
         assert_eq!(
-            resolve_model_path(args.model.model, args.model.model_preset)
-                .unwrap_or_else(default_model_path),
-            PathBuf::from("models/ggml-large-v3-turbo-q8_0.bin")
+            resolve_model_path(args.model.model, args.model.model_preset, models_dir)
+                .unwrap_or_else(|| default_model_path(models_dir)),
+            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 
@@ -760,8 +821,11 @@ mod tests {
 
         assert_eq!(args.model.model_preset, Some(ModelPreset::LargeV3Turbo));
         assert_eq!(
-            args.model.model_preset.unwrap().default_path(),
-            PathBuf::from("models/ggml-large-v3-turbo-q8_0.bin")
+            args.model
+                .model_preset
+                .unwrap()
+                .path_in(Path::new("/data/Scrib/models")),
+            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 
@@ -782,31 +846,42 @@ mod tests {
         };
 
         assert_eq!(
-            resolve_model_path(args.model.model, args.model.model_preset),
+            resolve_model_path(
+                args.model.model,
+                args.model.model_preset,
+                Path::new("/data/Scrib/models")
+            ),
             Some(PathBuf::from("models/custom.bin"))
         );
     }
 
     #[test]
     fn model_resolution_uses_the_preset_or_nothing() {
+        let models_dir = Path::new("/data/Scrib/models");
+
         assert_eq!(
-            resolve_model_path(None, Some(ModelPreset::LargeV3Turbo)),
-            Some(PathBuf::from("models/ggml-large-v3-turbo-q8_0.bin"))
+            resolve_model_path(None, Some(ModelPreset::LargeV3Turbo), models_dir),
+            Some(PathBuf::from(
+                "/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin"
+            ))
         );
-        assert_eq!(resolve_model_path(None, None), None);
+        assert_eq!(resolve_model_path(None, None, models_dir), None);
     }
 
     #[test]
     fn doctor_defaults_to_the_same_model_as_start() {
         // `doctor` must verify the model `start`/`transcribe` will actually use,
         // so a green check is meaningful when no model flag is passed.
+        let models_dir = Path::new("/data/Scrib/models");
+
         assert_eq!(
-            doctor_model_path(None, None),
-            resolve_model_path(None, None).unwrap_or_else(default_model_path)
+            doctor_model_path(None, None, models_dir),
+            resolve_model_path(None, None, models_dir)
+                .unwrap_or_else(|| default_model_path(models_dir))
         );
         assert_eq!(
-            doctor_model_path(None, None),
-            PathBuf::from("models/ggml-large-v3-turbo-q8_0.bin")
+            doctor_model_path(None, None, models_dir),
+            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 

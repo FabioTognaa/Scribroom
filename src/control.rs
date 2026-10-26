@@ -200,11 +200,20 @@ fn control_action_satisfied(action: ControlAction, state: SessionState) -> bool 
 }
 
 fn current_session(sessions_dir: &Path) -> Result<(CurrentSession, SessionPaths)> {
-    let sessions_dir = std::fs::canonicalize(sessions_dir).map_err(|error| Error::InvalidPath {
-        label: "sessions directory",
-        path: sessions_dir.to_path_buf(),
-        reason: error.to_string(),
-    })?;
+    let sessions_dir = match std::fs::canonicalize(sessions_dir) {
+        Ok(path) => path,
+        // A data directory that does not exist yet holds no current session.
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::NoCurrentSession(sessions_dir.to_path_buf()));
+        }
+        Err(error) => {
+            return Err(Error::InvalidPath {
+                label: "sessions directory",
+                path: sessions_dir.to_path_buf(),
+                reason: error.to_string(),
+            });
+        }
+    };
     let current_path = sessions_dir.join(CURRENT_SESSION_FILE);
     if !current_path.exists() {
         return Err(Error::NoCurrentSession(sessions_dir.to_path_buf()));
@@ -236,6 +245,17 @@ fn current_session(sessions_dir: &Path) -> Result<(CurrentSession, SessionPaths)
 mod tests {
     use super::*;
     use crate::schema::{SESSION_METADATA_FILE, STATUS_FILE};
+
+    #[test]
+    fn missing_sessions_directory_means_no_current_session() {
+        let temporary = tempfile::tempdir().expect("temporary directory should be created");
+        let sessions = temporary.path().join("not-created-yet");
+
+        assert!(matches!(
+            current_session(&sessions),
+            Err(Error::NoCurrentSession(_))
+        ));
+    }
 
     #[test]
     fn current_session_rejects_a_root_outside_the_sessions_directory() {

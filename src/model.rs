@@ -1,22 +1,19 @@
 //! Whisper model presets and the table of documented model artifacts.
 //!
-//! A preset turns a stable CLI name (`--model-preset`) into a path under
-//! `models/`. The known-model table lets `doctor` verify that a downloaded file
-//! is the documented artifact (name, size and SHA-256) instead of trusting any
-//! non-empty file that happens to share the name.
+//! A preset turns a stable CLI name (`--model-preset`) into a path under the
+//! data directory's `models` folder. The known-model table lets `doctor` verify
+//! that a downloaded file is the documented artifact (name, size and SHA-256)
+//! instead of trusting any non-empty file that happens to share the name.
 
 use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
 
-/// Directory, relative to the working directory, where GGML models are stored.
-pub const MODELS_DIR: &str = "models";
-
 /// Built-in model choices exposed as `--model-preset`.
 ///
 /// Presets are a convenience over `--model <path>`: they resolve to a documented
-/// file under [`MODELS_DIR`] and describe the default quantization. Any other
-/// whisper.cpp GGML file can still be selected explicitly with `--model`.
+/// file inside the models directory and describe the default quantization. Any
+/// other whisper.cpp GGML file can still be selected explicitly with `--model`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ModelPreset {
     /// Whisper small, Q5_1 (~190 MB). The original v1 model.
@@ -45,10 +42,10 @@ impl ModelPreset {
         }
     }
 
-    /// Path where the preset is looked up by default.
+    /// Path where this preset is looked up inside `models_dir`.
     #[must_use]
-    pub fn default_path(self) -> PathBuf {
-        Path::new(MODELS_DIR).join(self.file_name())
+    pub fn path_in(self, models_dir: &Path) -> PathBuf {
+        models_dir.join(self.file_name())
     }
 }
 
@@ -140,13 +137,15 @@ mod tests {
 
     #[test]
     fn presets_resolve_under_the_models_directory() {
+        let models = Path::new("/data/Scrib/models");
+
         assert_eq!(
-            ModelPreset::Small.default_path(),
-            PathBuf::from("models/ggml-small-q5_1.bin")
+            ModelPreset::Small.path_in(models),
+            PathBuf::from("/data/Scrib/models/ggml-small-q5_1.bin")
         );
         assert_eq!(
-            ModelPreset::LargeV3Turbo.default_path(),
-            PathBuf::from("models/ggml-large-v3-turbo-q8_0.bin")
+            ModelPreset::LargeV3Turbo.path_in(models),
+            PathBuf::from("/data/Scrib/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 

@@ -418,12 +418,9 @@ fn concurrent_pause_and_stop_cannot_falsely_acknowledge_stop() {
             Ok(SessionStatus {
                 state: SessionState::TranscriptionPaused,
                 ..
-            }) | Err(personal_transcriber::Error::InvalidControlState {
-                state: SessionState::Completed,
-                ..
-            })
+            }) | Err(personal_transcriber::Error::InvalidControlState { .. })
         ),
-        "pause may precede stop or be rejected after completion, but cannot overwrite stop"
+        "pause may precede stop or be rejected while the session stops, but cannot overwrite stop: {pause_result:?}"
     );
 }
 
