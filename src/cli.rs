@@ -718,13 +718,14 @@ fn resolve_model(
     })
 }
 
-/// Resolve the data directories for a command that takes `--sessions-dir`.
+/// Resolve the data directories for a command that takes `--sessions-dir`:
+/// the platform data root, its optional `config.json`, and the flag.
 /// Commands without one (`devices`, `export`) never read the environment.
 fn data_dirs(sessions_flag: Option<&Path>) -> Result<crate::paths::DataDirs> {
-    Ok(crate::paths::resolve(
-        &crate::paths::platform_data_root()?,
-        sessions_flag,
-    ))
+    let data = crate::paths::platform_data_root()?;
+    let home = crate::paths::home_directory()?;
+    let config = crate::paths::load_config(&data, &home)?;
+    Ok(crate::paths::resolve(&data, sessions_flag, config.as_ref()))
 }
 
 fn print_json(value: &impl serde::Serialize) -> Result<()> {
