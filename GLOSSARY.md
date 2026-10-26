@@ -88,6 +88,10 @@ _Avoid_: data dir, home dell'app
 La cartella dentro la cartella dati che raccoglie le cartelle di sessione e di trascrizione.
 _Avoid_: cartella di output, archivio
 
+**Cartella modelli**:
+La cartella dentro la cartella dati che contiene i file Whisper (`.bin`).
+_Avoid_: models, cartella dei pesi
+
 **Config**:
 Il file JSON scritto dall'utente nella cartella dati per spostare sessioni o modelli. È opzionale.
 _Avoid_: impostazioni, preferenze, settings

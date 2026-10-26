@@ -9,6 +9,12 @@ progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
 ### Added
 
+- `config.json` opzionale nella cartella dati sposta `sessions/` e `models/`
+  (`sessions_dir`, `models_dir`): percorsi assoluti o con `~`, chiavi sconosciute
+  ignorate, JSON malformato o vuoto rifiutato con un errore esplicito.
+- `SCRIB_DATA_DIR` sposta l'intera cartella dati per la modalità sviluppo e batte
+  il config; `SCRIB_DATA_DIR=.` riporta `sessions/` e `models/` nella directory
+  corrente.
 - `start` e `transcribe` chiedono il nome della repo prima del modello e nominano
   la cartella `YY-MM-DD_<repo>`: gli spazi diventano `_`, i caratteri non validi
   (`/ \ : * ? " < > |`) e i nomi già usati vengono segnalati e richiesti di nuovo,

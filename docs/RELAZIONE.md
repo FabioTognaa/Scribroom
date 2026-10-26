@@ -1,4 +1,4 @@
-# Come funziona scrib
+# Come funziona Scrib
 
 Questo documento spiega il programma a chi non lo ha mai visto: che problema risolve,
 con quali pezzi è costruito, e cosa fa davvero dal momento in cui si lancia un

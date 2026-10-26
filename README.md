@@ -83,6 +83,28 @@ Per quanto riguarda i formati wav, ad oggi non c'è ancora una funzione nativa c
 - `transcribe` elabora un file alla volta e in un solo thread: nel formato
   leggero non esistono pause, ripresa o stato di avanzamento.
 
+## Dati e configurazione
+
+Sessioni, modelli e configurazione non stanno nella directory da cui lanci il
+comando, ma in una cartella dati per utente:
+`~/Library/Application Support/Scrib/` su macOS, con dentro `sessions/`,
+`models/` e un `config.json` opzionale.
+
+Il config sposta le due sottocartelle, con percorsi assoluti o che iniziano con
+`~`:
+
+```json
+{
+  "sessions_dir": "/Volumes/esterno/scrib/sessions",
+  "models_dir": "~/Documenti/modelli"
+}
+```
+
+Per lo sviluppo, `SCRIB_DATA_DIR` sposta l'intera cartella dati e batte il
+config; `SCRIB_DATA_DIR=.` riporta `sessions/` e `models/` nella directory
+corrente. La precedenza completa, il formato del config e gli errori sono in
+[Comandi e opzioni](docs/COMMANDS_HELP.md#cartella-dati-config-e-scrib_data_dir).
+
 ## Documentazione nel dettaglio
 
 - [Sezione aiuto per tutti i comandi](docs/COMMANDS_HELP.md)
