@@ -7,15 +7,28 @@
 - BlackHole.
 
 Installare e configurare BlackHole (se ancora non lo si possiede sulla machcina) seguendo la [guida macOS](BLACKHOLE_MACOS.md), quindi
-compilare:
+installare:
 
-## 1. Clonazione e configurazione dell'ambiente
+## 1. Clonazione e installazione
 
 ```sh
 git clone https://github.com/FabioTognaa/personal-transcriber.git
 cd personal-transcriber
-cargo build --release
+cargo install --path .
 ```
+
+Da qui in poi i comandi usano `scrib`, che `cargo install` mette nel `PATH`
+(`~/.cargo/bin`). Se preferisci non installarlo, compila con
+`cargo build --release` ed esegui `./target/release/scrib` al posto di `scrib`.
+
+Verifica i prerequisiti locali:
+
+```sh
+scrib doctor
+```
+
+Stampa un report JSON: se qualcosa manca, il controllo corrispondente è `fail`,
+`ready` è `false` e il comando esce con codice diverso da zero.
 
 ## 2. Modelli
 
@@ -52,6 +65,12 @@ Il valore predefinito è `large-v3-turbo`; `small` resta l'opzione leggera per m
 Un file GGML qualsiasi siseleziona con `--model <percorso>`, che ha la precedenza sul preset.
 
 Esempio di utilizzo:
+
+```sh
+scrib start --model-preset large-v3-turbo --language it
+```
+
+In alternativa, senza installare `scrib`, la stessa cosa in modalità sviluppo:
 
 ```sh
 cargo run --release -- start --model-preset large-v3-turbo --language it

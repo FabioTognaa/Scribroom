@@ -33,6 +33,40 @@ pub struct Config {
 /// Environment variable that moves the data root for development.
 pub const DATA_DIR_ENV: &str = "SCRIB_DATA_DIR";
 
+/// The inputs of [`resolve`], named so the positional call sites cannot swap
+/// the flag for the environment or the config.
+pub struct Sources<'a> {
+    pub default_root: &'a Path,
+    pub sessions_flag: Option<&'a Path>,
+    pub environment: Option<&'a Path>,
+    pub config: Option<&'a Config>,
+}
+
+/// Resolve every directory for the current machine: read `SCRIB_DATA_DIR`, the
+/// home directory and `config.json` from the effective data root, then call the
+/// pure [`resolve`]. The config is always read and validated, even when the
+/// environment wins and its values are ignored, so a broken file is an explicit
+/// error rather than a silent fallback.
+pub fn data_dirs(sessions_flag: Option<&Path>) -> Result<DataDirs> {
+    let environment = std::env::var_os(DATA_DIR_ENV).map(PathBuf::from);
+    data_dirs_with(sessions_flag, environment.as_deref())
+}
+
+/// The environment-free body of [`data_dirs`], so tests can pass a root
+/// without mutating the process environment.
+fn data_dirs_with(sessions_flag: Option<&Path>, environment: Option<&Path>) -> Result<DataDirs> {
+    let default_root = platform_data_root()?;
+    let home = home_directory()?;
+    let data_root = environment.unwrap_or(&default_root);
+    let config = load_config(data_root, &home)?;
+    Ok(resolve(Sources {
+        default_root: &default_root,
+        sessions_flag,
+        environment,
+        config: config.as_ref(),
+    }))
+}
+
 /// Resolve every directory from the already-decided default data root, the
 /// explicit `--sessions-dir` flag, the `SCRIB_DATA_DIR` value and the parsed
 /// config. No I/O, so tests never touch `$HOME`. Precedence: flag, then
@@ -40,12 +74,13 @@ pub const DATA_DIR_ENV: &str = "SCRIB_DATA_DIR";
 /// wins over the config, which is ignored entirely, and its root may be relative
 /// (`.` reproduces the old source-tree layout).
 #[must_use]
-pub fn resolve(
-    default_root: &Path,
-    sessions_flag: Option<&Path>,
-    environment: Option<&Path>,
-    config: Option<&Config>,
-) -> DataDirs {
+pub fn resolve(sources: Sources<'_>) -> DataDirs {
+    let Sources {
+        default_root,
+        sessions_flag,
+        environment,
+        config,
+    } = sources;
     let data = environment.unwrap_or(default_root);
     let config = config.filter(|_| environment.is_none());
     DataDirs {
@@ -71,11 +106,11 @@ pub fn parse_config(text: &str, path: &Path, home: &Path) -> Result<Config> {
     Ok(Config {
         sessions_dir: file
             .sessions_dir
-            .map(|value| expand(value, "sessions_dir", path, home))
+            .map(|value| expand_tilde(value, "sessions_dir", path, home))
             .transpose()?,
         models_dir: file
             .models_dir
-            .map(|value| expand(value, "models_dir", path, home))
+            .map(|value| expand_tilde(value, "models_dir", path, home))
             .transpose()?,
     })
 }
@@ -88,15 +123,19 @@ struct ConfigFile {
 
 /// Accept an absolute path or one starting with `~`; a relative path has no
 /// obvious meaning, so it is rejected naming the config file to fix.
-fn expand(value: PathBuf, key: &str, config: &Path, home: &Path) -> Result<PathBuf> {
-    if let Ok(rest) = value.strip_prefix("~") {
+fn expand_tilde(value: PathBuf, key: &str, config_path: &Path, home: &Path) -> Result<PathBuf> {
+    let text = value.to_string_lossy();
+    if text == "~" {
+        return Ok(home.to_path_buf());
+    }
+    if let Some(rest) = text.strip_prefix("~/").or_else(|| text.strip_prefix("~\\")) {
         return Ok(home.join(rest));
     }
     if value.is_absolute() {
         return Ok(value);
     }
     Err(Error::InvalidConfig {
-        path: config.to_path_buf(),
+        path: config_path.to_path_buf(),
         reason: format!(
             "{key} must be an absolute path or start with `~`, got {}",
             value.display()
@@ -179,12 +218,12 @@ mod tests {
         let config = config
             .map(|text| parse_config(text, Path::new(CONFIG_PATH), Path::new(HOME)))
             .transpose()?;
-        Ok(resolve(
-            Path::new(DATA),
+        Ok(resolve(Sources {
+            default_root: Path::new(DATA),
             sessions_flag,
             environment,
-            config.as_ref(),
-        ))
+            config: config.as_ref(),
+        }))
     }
 
     #[test]
@@ -220,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn environment_root_reproduces_the_source_layout() {
+    fn scrib_data_dir_dot_reproduces_the_source_layout() {
         let dirs = dirs(None, Some(Path::new(".")), None).expect("a relative root is valid");
 
         assert_eq!(dirs.data, Path::new("."));
@@ -247,7 +286,12 @@ mod tests {
     #[test]
     fn without_the_environment_the_platform_default_is_the_root() {
         let platform = Path::new("/Users/test/Library/Application Support/Scrib");
-        let dirs = resolve(platform, None, None, None);
+        let dirs = resolve(Sources {
+            default_root: platform,
+            sessions_flag: None,
+            environment: None,
+            config: None,
+        });
 
         assert_eq!(dirs.data, platform);
         assert_eq!(dirs.sessions, platform.join("sessions"));
@@ -312,6 +356,15 @@ mod tests {
 
         assert_eq!(dirs.sessions, Path::new("/Users/test/Documenti/sessioni"));
         assert_eq!(dirs.models, Path::new("/Users/test"));
+    }
+
+    #[test]
+    fn tilde_followed_by_a_name_is_not_a_home_shortcut() {
+        let error = dirs(Some(r#"{"sessions_dir": "~altro/sessioni"}"#), None, None)
+            .expect_err("only `~` and `~/` are home shortcuts")
+            .to_string();
+
+        assert!(error.contains(CONFIG_PATH), "{error}");
     }
 
     #[test]
@@ -386,6 +439,33 @@ mod tests {
             config,
             "loading must be repeatable and leave the file untouched"
         );
+    }
+
+    /// The environment picks the root, but the config there is still read and
+    /// validated: a broken file must never be a silent fallback.
+    #[test]
+    fn data_dirs_with_environment_still_loads_the_config() {
+        let temporary = tempfile::tempdir().expect("temp directory should be created");
+        let root = temporary.path();
+
+        std::fs::write(
+            root.join("config.json"),
+            r#"{"sessions_dir": "/Volumes/ext/sessions"}"#,
+        )
+        .expect("fixture should be written");
+        let valid = data_dirs_with(None, Some(root));
+        std::fs::write(root.join("config.json"), r#"{"sessions_dir": "#)
+            .expect("fixture should be overwritten");
+        let broken = data_dirs_with(None, Some(root));
+
+        let valid = valid.expect("a valid config under the environment root is fine");
+        assert_eq!(valid.data, root);
+        assert_eq!(valid.sessions, root.join("sessions"));
+        assert_eq!(valid.models, root.join("models"));
+        let error = broken
+            .expect_err("a broken config is an error even when the environment wins")
+            .to_string();
+        assert!(error.contains("config.json"), "{error}");
     }
 
     #[cfg(target_os = "macos")]
