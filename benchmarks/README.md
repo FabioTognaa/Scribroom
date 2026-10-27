@@ -14,15 +14,9 @@ Il modello predefinito resta
 - quantizzazione: Q5_1;
 - lingue: modello multilingue, usato esplicitamente con `it`.
 
-`--model-preset` aggiunge modelli più accurati e più pesanti, verificati da
-`doctor` (dimensione e SHA-256 documentati in `src/model.rs`):
-
-| Preset | File | Byte | SHA-256 (inizio) |
-| --- | --- | ---: | --- |
-| `small` | `ggml-small-q5_1.bin` | 190.085.487 | `ae85e4a9…` |
-| `medium` | `ggml-medium-q5_0.bin` | 539.212.467 | `19fea4b3…` |
-| `large-v3-turbo` | `ggml-large-v3-turbo-q8_0.bin` | 874.188.075 | `317eb69c…` |
-| `large-v3` | `ggml-large-v3-q5_0.bin` | 1.081.140.203 | `d75795ec…` |
+`asr-benchmark` accetta qualunque GGML con `--model <percorso>`. Il prodotto usa
+un solo modello, `large-v3-turbo` in Q8_0. I file che `doctor` sa verificare
+(nome, dimensione e SHA-256) sono in `src/model.rs`.
 
 Qualsiasi altro GGML si seleziona con `--model <percorso>`.
 

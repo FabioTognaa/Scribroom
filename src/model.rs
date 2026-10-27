@@ -115,27 +115,53 @@ pub fn ensure_default_model(models_dir: &Path, url: &str) -> Result<PathBuf> {
         return Ok(path);
     }
     let known = known_model(DEFAULT_MODEL_FILE).expect("the default model is documented");
-    fetch(url, &path, known.size_bytes, known.sha256)?;
+    download_verified_model(url, &path, known)?;
     Ok(path)
 }
 
+/// Exclusive lock for the model download. `flock` releases it when the process
+/// exits, so a crashed run leaves no stale lock behind.
+#[cfg(unix)]
+fn lock_download(destination: &Path) -> Result<std::fs::File> {
+    use std::os::unix::io::AsRawFd;
+
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(false)
+        .open(destination.with_extension("lock"))?;
+    // SAFETY: `file` owns a valid descriptor for the lifetime of the call.
+    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+        return Err(Error::ModelDownloadBusy);
+    }
+    Ok(file)
+}
+
+#[cfg(not(unix))]
+fn lock_download(_destination: &Path) -> Result<()> {
+    Ok(())
+}
+
 /// Download `url` to `destination`, verifying size and SHA-256 before the final
-/// name appears. The transfer goes through `curl`, whose progress bar, retries
-/// and resume support come for free.
-fn fetch(url: &str, destination: &Path, expected_size: u64, expected_sha256: &str) -> Result<()> {
+/// name appears. `curl` provides the transport, the progress bar, retries and
+/// resume; the lock keeps two runs from writing the same partial file.
+fn download_verified_model(url: &str, destination: &Path, expected: &KnownModel) -> Result<()> {
     let parent = destination.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent)?;
     crate::validation::ensure_disk_space(
         parent,
-        expected_size.saturating_add(crate::validation::SESSION_DISK_HEADROOM_BYTES),
+        expected
+            .size_bytes
+            .saturating_add(crate::validation::SESSION_DISK_HEADROOM_BYTES),
     )?;
+    let _lock = lock_download(destination)?;
 
-    // ponytail: the per-process `.part` keeps two concurrent runs from writing
-    // the same file; the price is that a killed download restarts from zero.
-    let partial = destination.with_extension(format!("{}.part", std::process::id()));
+    // The partial name is stable so an interrupted download resumes with `-C -`.
+    let partial = destination.with_extension("part");
     eprintln!(
-        "downloading the default model ({} MB) from {url}",
-        expected_size / 1_000_000
+        "downloading {} ({} MB) from {url}",
+        expected.file_name,
+        expected.size_bytes / 1_000_000
     );
 
     let mut curl = std::process::Command::new("curl");
@@ -154,27 +180,32 @@ fn fetch(url: &str, destination: &Path, expected_size: u64, expected_sha256: &st
     } else {
         curl.arg("--silent").arg("--show-error");
     }
-    let status = curl.arg(url).status().map_err(|error| Error::ModelDownload {
-        url: url.to_owned(),
-        reason: if error.kind() == std::io::ErrorKind::NotFound {
-            "curl was not found; install curl or pass --model <path>".to_owned()
-        } else {
-            error.to_string()
-        },
-    })?;
+    let status = curl
+        .arg(url)
+        .status()
+        .map_err(|error| Error::ModelDownload {
+            url: url.to_owned(),
+            reason: if error.kind() == std::io::ErrorKind::NotFound {
+                "curl was not found; install curl or pass --model <path>".to_owned()
+            } else {
+                error.to_string()
+            },
+        })?;
     if !status.success() {
-        let _ = std::fs::remove_file(&partial);
+        // Keep the partial file: the next attempt resumes from its size.
         return Err(Error::ModelDownload {
             url: url.to_owned(),
-            reason: format!("curl exited with {status}"),
+            reason: format!(
+                "curl exited with {status}; check the connection or pass --model <path>"
+            ),
         });
     }
 
     let actual = crate::asr::sha256_file(&partial)?;
-    if actual != expected_sha256 {
+    if actual != expected.sha256 {
         let _ = std::fs::remove_file(&partial);
         return Err(Error::ModelChecksum {
-            expected: expected_sha256.to_owned(),
+            expected: expected.sha256.to_owned(),
             actual,
         });
     }
@@ -183,9 +214,9 @@ fn fetch(url: &str, destination: &Path, expected_size: u64, expected_sha256: &st
         // Another process finished first: keep its file and verify it.
         let _ = std::fs::remove_file(&partial);
         let identity = crate::asr::model_identity(destination)?;
-        if identity.sha256 != expected_sha256 {
+        if identity.sha256 != expected.sha256 {
             return Err(Error::ModelChecksum {
-                expected: expected_sha256.to_owned(),
+                expected: expected.sha256.to_owned(),
                 actual: identity.sha256,
             });
         }
@@ -193,6 +224,8 @@ fn fetch(url: &str, destination: &Path, expected_size: u64, expected_sha256: &st
     }
 
     std::fs::rename(&partial, destination)?;
+    // The hash is already known; cache it so the first identity call is free.
+    let _ = crate::asr::remember_model_identity(destination, expected.sha256);
     Ok(())
 }
 
@@ -203,6 +236,21 @@ mod tests {
     const MODEL_BYTES: &[u8] = b"model bytes";
     const MODEL_BYTES_SHA256: &str =
         "9cb7487000bc86ac36ce83c4acfabe8878552be99572a6770f65ab1d048a5c48";
+    const MODEL: KnownModel = KnownModel {
+        file_name: "test.bin",
+        size_bytes: MODEL_BYTES.len() as u64,
+        sha256: MODEL_BYTES_SHA256,
+    };
+    const WRONG_MODEL: KnownModel = KnownModel {
+        file_name: "test.bin",
+        size_bytes: MODEL_BYTES.len() as u64,
+        sha256: "0000000000000000000000000000000000000000000000000000000000000000",
+    };
+    const HUGE_MODEL: KnownModel = KnownModel {
+        file_name: "test.bin",
+        size_bytes: u64::MAX,
+        sha256: MODEL_BYTES_SHA256,
+    };
 
     fn file_url(path: &Path) -> String {
         format!("file://{}", path.display())
@@ -228,22 +276,14 @@ mod tests {
     }
 
     #[test]
-    fn fetch_installs_a_verified_file() {
+    fn download_installs_a_verified_file() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
         let source = temporary.path().join("source.bin");
         std::fs::write(&source, MODEL_BYTES).expect("fixture should be written");
-        let destination = temporary
-            .path()
-            .join("models")
-            .join("ggml-large-v3-turbo-q8_0.bin");
+        let destination = temporary.path().join("models").join(DEFAULT_MODEL_FILE);
 
-        fetch(
-            &file_url(&source),
-            &destination,
-            MODEL_BYTES.len() as u64,
-            MODEL_BYTES_SHA256,
-        )
-        .expect("a matching file should install");
+        download_verified_model(&file_url(&source), &destination, &MODEL)
+            .expect("a matching file should install");
 
         assert_eq!(
             std::fs::read(&destination).expect("model should be readable"),
@@ -256,13 +296,32 @@ mod tests {
     }
 
     #[test]
-    fn fetch_removes_the_partial_file_when_the_hash_does_not_match() {
+    fn download_resumes_a_partial_file() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
         let source = temporary.path().join("source.bin");
         std::fs::write(&source, MODEL_BYTES).expect("fixture should be written");
-        let destination = temporary.path().join("ggml-large-v3-turbo-q8_0.bin");
+        let destination = temporary.path().join(DEFAULT_MODEL_FILE);
+        std::fs::write(destination.with_extension("part"), &MODEL_BYTES[..6])
+            .expect("partial fixture should be written");
 
-        let error = fetch(&file_url(&source), &destination, MODEL_BYTES.len() as u64, &"0".repeat(64))
+        download_verified_model(&file_url(&source), &destination, &MODEL)
+            .expect("a partial file should resume");
+
+        assert_eq!(
+            std::fs::read(&destination).expect("model should be readable"),
+            MODEL_BYTES
+        );
+        assert!(part_files(temporary.path()).is_empty());
+    }
+
+    #[test]
+    fn download_removes_the_partial_file_when_the_hash_does_not_match() {
+        let temporary = tempfile::tempdir().expect("temp directory should be created");
+        let source = temporary.path().join("source.bin");
+        std::fs::write(&source, MODEL_BYTES).expect("fixture should be written");
+        let destination = temporary.path().join(DEFAULT_MODEL_FILE);
+
+        let error = download_verified_model(&file_url(&source), &destination, &WRONG_MODEL)
             .expect_err("a wrong hash must fail");
 
         assert!(matches!(error, Error::ModelChecksum { .. }), "{error}");
@@ -274,20 +333,15 @@ mod tests {
     }
 
     #[test]
-    fn fetch_keeps_an_existing_destination() {
+    fn download_keeps_an_existing_destination() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
         let source = temporary.path().join("source.bin");
         std::fs::write(&source, MODEL_BYTES).expect("fixture should be written");
-        let destination = temporary.path().join("ggml-large-v3-turbo-q8_0.bin");
+        let destination = temporary.path().join(DEFAULT_MODEL_FILE);
         std::fs::write(&destination, MODEL_BYTES).expect("fixture should be written");
 
-        fetch(
-            &file_url(&source),
-            &destination,
-            MODEL_BYTES.len() as u64,
-            MODEL_BYTES_SHA256,
-        )
-        .expect("an existing verified file should be kept");
+        download_verified_model(&file_url(&source), &destination, &MODEL)
+            .expect("an existing verified file should be kept");
 
         assert_eq!(
             std::fs::read(&destination).expect("model should be readable"),
@@ -297,16 +351,19 @@ mod tests {
     }
 
     #[test]
-    fn fetch_refuses_when_disk_space_is_insufficient() {
+    fn download_refuses_when_disk_space_is_insufficient() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
         let source = temporary.path().join("source.bin");
         std::fs::write(&source, MODEL_BYTES).expect("fixture should be written");
-        let destination = temporary.path().join("ggml-large-v3-turbo-q8_0.bin");
+        let destination = temporary.path().join(DEFAULT_MODEL_FILE);
 
-        let error = fetch(&file_url(&source), &destination, u64::MAX, MODEL_BYTES_SHA256)
+        let error = download_verified_model(&file_url(&source), &destination, &HUGE_MODEL)
             .expect_err("an impossible size must fail before downloading");
 
-        assert!(matches!(error, Error::InsufficientDiskSpace { .. }), "{error}");
+        assert!(
+            matches!(error, Error::InsufficientDiskSpace { .. }),
+            "{error}"
+        );
         assert!(!destination.exists());
     }
 

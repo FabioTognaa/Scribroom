@@ -328,12 +328,12 @@ ai WAV.
 Silicon (`aarch64`), directory di sessione utilizzabile, almeno 64 MiB liberi,
 modello leggibile, almeno un input, BlackHole visibile. Senza `--model` verifica il
 `large-v3-turbo` della cartella modelli; se manca, il dettaglio spiega che il primo
-`start` lo scarica. Se il file corrisponde a un modello documentato
-(`ggml-small-q5_1.bin`, `ggml-medium-q5_0.bin`, `ggml-large-v3-turbo-q8_0.bin`,
-`ggml-large-v3-q5_0.bin` e le loro varianti in `src/model.rs`), dimensione e SHA-256
-devono essere quelli attesi. Un altro nome di modello, se il file non è vuoto, passa
-con un avviso nel dettaglio. Sotto 1 GiB libero il disco è un avviso; sotto 64 MiB è
-un fallimento. `ready: false` produce un exit code diverso da zero.
+`start` lo scarica. Se il file corrisponde a un modello documentato (per esempio
+`ggml-large-v3-turbo-q8_0.bin`, o le altre varianti elencate in `src/model.rs`),
+dimensione e SHA-256 devono essere quelli attesi. Un altro nome di modello, se il
+file non è vuoto, passa con un avviso nel dettaglio. Sotto 1 GiB libero il disco è
+un avviso; sotto 64 MiB è un fallimento. `ready: false` produce un exit code
+diverso da zero.
 
 Il permesso del microfono e il routing vero della call restano non verificati finché
 non si usa `--probe-audio`, e anche quello dice solo se in quei secondi è arrivato

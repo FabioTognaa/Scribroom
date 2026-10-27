@@ -45,6 +45,9 @@ scrib start --model /percorso/del/modello.bin
 `--model` ha la precedenza sul modello predefinito e non scarica nulla. Senza rete e
 senza `--model`, il comando fallisce spiegando le due opzioni.
 
+Su Apple Silicon con almeno 16 GiB, `large-v3-turbo` resta sotto il real-time
+factor 1 con margine ampio.
+
 ## 3. Verifica dei prerequisiti
 
 ```sh

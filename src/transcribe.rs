@@ -117,7 +117,7 @@ fn progress_line(transcribed_us: u64, total_us: Option<u64>) -> String {
             )
         }
         None => format!(
-            "[{:-<BAR_WIDTH$}] durata ignota  {} trascritti",
+            "[{:-<BAR_WIDTH$}] unknown duration  {} transcribed",
             "",
             mmss(transcribed_us),
         ),
@@ -456,11 +456,11 @@ mod tests {
     fn progress_line_falls_back_to_indeterminate_without_a_duration() {
         assert_eq!(
             progress_line(65_000_000, None),
-            "[--------------------] durata ignota  01:05 trascritti"
+            "[--------------------] unknown duration  01:05 transcribed"
         );
         assert_eq!(
             progress_line(1, Some(0)),
-            "[--------------------] durata ignota  00:00 trascritti"
+            "[--------------------] unknown duration  00:00 transcribed"
         );
     }
 

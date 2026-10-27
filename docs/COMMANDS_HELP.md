@@ -98,11 +98,11 @@ directory da cui lanci il comando. Se il file manca, il primo `start` o
 `transcribe` lo scarica, ne verifica lo SHA-256 e lo mette nella cartella; `doctor`
 non scarica mai e segnala il file mancante.
 
-| Opzione                 | Tipo         | Default                  | Descrizione                                                                                      |
-| ----------------------- | ------------ | ------------------------ | ------------------------------------------------------------------------------------------------ |
-| `--model <PERCORSO>`    | percorso     | modello predefinito      | File GGML locale. Se passato non scarica nulla: il file deve esistere.                            |
-| `--language <LINGUA>`   | `it` \| `en` | `it`                     | Lingua parlata, valida per tutta la sessione o per l'intero file. Nessun rilevamento automatico. |
-| `--asr-prompt <TESTO>`  | testo        | prompt predefinito della lingua | Prompt iniziale per Whisper. `--asr-prompt ""` lo disattiva.                              |
+| Opzione                | Tipo         | Default                         | Descrizione                                                                                      |
+| ---------------------- | ------------ | ------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `--model <PERCORSO>`   | percorso     | modello predefinito             | File GGML locale. Se passato non scarica nulla: il file deve esistere.                            |
+| `--language <LINGUA>`  | `it` \| `en` | `it`                            | Lingua parlata, valida per tutta la sessione o per l'intero file. Nessun rilevamento automatico. |
+| `--asr-prompt <TESTO>` | testo        | prompt predefinito della lingua | Prompt iniziale per Whisper. `--asr-prompt ""` lo disattiva.                                     |
 
 Un GGML diverso si seleziona solo con `--model`, che ha la precedenza sul modello
 predefinito. I file noti a `doctor` sono elencati in `KNOWN_MODELS`; un nome non

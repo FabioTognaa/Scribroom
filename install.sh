@@ -40,11 +40,11 @@ fi
 
 if [ -w "$destination" ]; then
     install -m 755 "$tmp/$binary" "$destination/$binary"
-elif command -v sudo >/dev/null 2>&1; then
+elif [ -t 1 ] && command -v sudo >/dev/null 2>&1; then
     sudo install -m 755 "$tmp/$binary" "$destination/$binary" ||
         fail "cannot write to $destination"
 else
-    fail "$destination is not writable and sudo is unavailable"
+    fail "$destination is not writable; run the installer from a terminal or with sudo"
 fi
 
 printf 'installed %s\n' "$destination/$binary"

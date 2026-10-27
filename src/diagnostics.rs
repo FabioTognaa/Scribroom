@@ -112,7 +112,10 @@ fn doctor_internal(
         sessions_directory_check(&dirs.sessions),
     ];
     checks.push(disk_space_check(&dirs.sessions));
-    checks.push(model_check(model));
+    checks.push(model_check(
+        model,
+        model == crate::model::default_model_path(&dirs.models),
+    ));
     checks.extend(device_checks());
     match audio_probe {
         Some((microphone, system_audio, duration)) => {
@@ -273,7 +276,7 @@ fn disk_space_check(sessions_dir: &Path) -> DoctorCheck {
     }
 }
 
-fn model_check(model: &Path) -> DoctorCheck {
+fn model_check(model: &Path, is_default: bool) -> DoctorCheck {
     match crate::validation::validate_existing_file(model, "model")
         .and_then(|_| crate::asr::model_identity(model))
     {
@@ -315,9 +318,7 @@ fn model_check(model: &Path) -> DoctorCheck {
             },
         },
         Err(error) => {
-            let is_missing_default = !model.exists()
-                && model.file_name().and_then(|name| name.to_str())
-                    == Some(crate::model::DEFAULT_MODEL_FILE);
+            let is_missing_default = is_default && !model.exists();
             let detail = if is_missing_default {
                 format!(
                     "{} is missing; it will be downloaded on the first start",
@@ -423,7 +424,7 @@ mod tests {
 
     #[test]
     fn missing_model_is_a_failed_check() {
-        let check = model_check(Path::new("/definitely/missing/model.bin"));
+        let check = model_check(Path::new("/definitely/missing/model.bin"), false);
 
         assert_eq!(check.status, CheckStatus::Fail);
     }
@@ -431,11 +432,9 @@ mod tests {
     #[test]
     fn a_missing_default_model_explains_the_first_start_download() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
-        let model = temporary
-            .path()
-            .join(crate::model::DEFAULT_MODEL_FILE);
+        let model = temporary.path().join(crate::model::DEFAULT_MODEL_FILE);
 
-        let check = model_check(&model);
+        let check = model_check(&model, true);
 
         assert_eq!(check.status, CheckStatus::Fail);
         assert!(check.detail.contains("downloaded on the first start"));
@@ -444,12 +443,10 @@ mod tests {
     #[test]
     fn corrupted_documented_model_is_a_failed_check() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
-        let model = temporary
-            .path()
-            .join("ggml-small-q5_1.bin");
+        let model = temporary.path().join("ggml-small-q5_1.bin");
         std::fs::write(&model, b"not the documented model").expect("fixture should be written");
 
-        assert_eq!(model_check(&model).status, CheckStatus::Fail);
+        assert_eq!(model_check(&model, false).status, CheckStatus::Fail);
     }
 
     #[test]
@@ -458,7 +455,7 @@ mod tests {
         let model = temporary.path().join("custom-model.bin");
         std::fs::write(&model, b"a custom local model").expect("fixture should be written");
 
-        let check = model_check(&model);
+        let check = model_check(&model, false);
 
         assert_eq!(check.status, CheckStatus::Pass);
         assert!(check.detail.contains("cannot be verified"));

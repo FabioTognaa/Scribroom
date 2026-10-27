@@ -426,6 +426,28 @@ fn cached_sha256(path: &Path, metadata: &std::fs::Metadata) -> Result<String> {
     Ok(sha256)
 }
 
+/// Record an already verified identity so the next [`model_identity`] call does
+/// not hash the file again. Best effort: callers ignore the result.
+pub fn remember_model_identity(path: &Path, sha256: &str) -> Result<()> {
+    let metadata = std::fs::metadata(path)?;
+    let Some(modified_nanos) = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .and_then(|duration| u64::try_from(duration.as_nanos()).ok())
+    else {
+        return Ok(());
+    };
+    atomic_write_json(
+        &path.with_extension("sha256"),
+        &CachedModelIdentity {
+            size_bytes: metadata.len(),
+            modified_nanos,
+            sha256: sha256.to_owned(),
+        },
+    )
+}
+
 pub fn model_identity(path: &Path) -> Result<ModelIdentity> {
     let metadata = std::fs::metadata(path)?;
     if !metadata.is_file() || metadata.len() == 0 {

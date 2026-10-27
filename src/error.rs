@@ -60,6 +60,9 @@ pub enum Error {
     #[error("cannot download the model from {url}: {reason}")]
     ModelDownload { url: String, reason: String },
 
+    #[error("another process is downloading the model; retry when it finishes")]
+    ModelDownloadBusy,
+
     #[error(
         "the downloaded model does not match the documented sha256 (expected {expected}, got {actual}); the file was removed"
     )]
