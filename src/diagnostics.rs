@@ -420,7 +420,7 @@ mod tests {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
         let model = temporary
             .path()
-            .join(crate::model::ModelPreset::Small.file_name());
+            .join("ggml-small-q5_1.bin");
         std::fs::write(&model, b"not the documented model").expect("fixture should be written");
 
         assert_eq!(model_check(&model).status, CheckStatus::Fail);

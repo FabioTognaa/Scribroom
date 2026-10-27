@@ -1,52 +1,19 @@
-//! Whisper model presets and the table of documented model artifacts.
+//! The Whisper model the application ships and the table of documented artifacts.
 //!
-//! A preset turns a stable CLI name (`--model-preset`) into a path under the
-//! data directory's `models` folder. The known-model table lets `doctor` verify
-//! that a downloaded file is the documented artifact (name, size and SHA-256)
-//! instead of trusting any non-empty file that happens to share the name.
+//! The product has one model: `large-v3-turbo` in Q8_0, resolved under the data
+//! directory's `models` folder. The known-model table lets `doctor` verify that a
+//! file is the documented artifact (name, size and SHA-256) instead of trusting
+//! any non-empty file that happens to share the name.
 
 use std::path::{Path, PathBuf};
 
-use clap::ValueEnum;
+/// File name of the model the application uses when no `--model` is given.
+pub const DEFAULT_MODEL_FILE: &str = "ggml-large-v3-turbo-q8_0.bin";
 
-/// Built-in model choices exposed as `--model-preset`.
-///
-/// Presets are a convenience over `--model <path>`: they resolve to a documented
-/// file inside the models directory and describe the default quantization. Any
-/// other whisper.cpp GGML file can still be selected explicitly with `--model`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum ModelPreset {
-    /// Whisper small, Q5_1 (~190 MB). The original v1 model.
-    Small,
-    /// Whisper medium, Q5_0 (~540 MB).
-    Medium,
-    /// Whisper large-v3-turbo, Q8_0 (~874 MB). Best quality/speed trade-off.
-    LargeV3Turbo,
-    /// Whisper large-v3, Q5_0 (~1.1 GB). Highest quality, heaviest option.
-    LargeV3,
-}
-
-impl ModelPreset {
-    /// All presets, in the order shown by the interactive menu.
-    pub const ALL: [ModelPreset; 4] =
-        [Self::Small, Self::Medium, Self::LargeV3Turbo, Self::LargeV3];
-
-    /// File name of the documented artifact for this preset.
-    #[must_use]
-    pub const fn file_name(self) -> &'static str {
-        match self {
-            Self::Small => "ggml-small-q5_1.bin",
-            Self::Medium => "ggml-medium-q5_0.bin",
-            Self::LargeV3Turbo => "ggml-large-v3-turbo-q8_0.bin",
-            Self::LargeV3 => "ggml-large-v3-q5_0.bin",
-        }
-    }
-
-    /// Path where this preset is looked up inside `models_dir`.
-    #[must_use]
-    pub fn path_in(self, models_dir: &Path) -> PathBuf {
-        models_dir.join(self.file_name())
-    }
+/// Path of the default model inside `models_dir`.
+#[must_use]
+pub fn default_model_path(models_dir: &Path) -> PathBuf {
+    models_dir.join(DEFAULT_MODEL_FILE)
 }
 
 /// A model file published by the `ggerganov/whisper.cpp` GGML repository.
@@ -136,15 +103,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn presets_resolve_under_the_models_directory() {
+    fn the_default_model_resolves_under_the_models_directory() {
         let models = Path::new("/data/Scribroom/models");
 
         assert_eq!(
-            ModelPreset::Small.path_in(models),
-            PathBuf::from("/data/Scribroom/models/ggml-small-q5_1.bin")
-        );
-        assert_eq!(
-            ModelPreset::LargeV3Turbo.path_in(models),
+            default_model_path(models),
             PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }

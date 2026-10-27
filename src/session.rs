@@ -42,7 +42,7 @@ pub struct StartOptions {
     pub segmenter: SegmenterConfig,
     pub inference: InferenceConfig,
     pub model_identity: Option<ModelIdentity>,
-    /// Repository name chosen in the start menu; the session directory becomes
+    /// Session name chosen at the prompt; the session directory becomes
     /// `YY-MM-DD_<name>`. `None` keeps the date-only name (non-interactive runs).
     pub session_name: Option<String>,
     /// Live sessions only: close the session after this much consecutive

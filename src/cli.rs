@@ -5,7 +5,7 @@ use std::time::Duration;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::domain::{ControlAction, InferenceConfig, SegmenterConfig};
-use crate::model::ModelPreset;
+use crate::model::default_model_path;
 use crate::session::StartOptions;
 use crate::{Error, Result};
 
@@ -62,13 +62,10 @@ pub enum Command {
 
 #[derive(Debug, Args)]
 pub struct DoctorArgs {
-    /// Local whisper.cpp GGML model path. Overrides `--model-preset`.
+    /// Local whisper.cpp GGML model path. Defaults to the model under the data
+    /// directory's `models` folder.
     #[arg(long)]
     pub model: Option<PathBuf>,
-
-    /// Built-in model preset resolved under `models/`.
-    #[arg(long, value_enum)]
-    pub model_preset: Option<ModelPreset>,
 
     /// Open both live inputs and require signal on each.
     #[arg(long)]
@@ -135,15 +132,10 @@ pub struct TranscribeArgs {
 /// Model selection and language, shared by `start` and `transcribe`.
 #[derive(Debug, Args)]
 pub struct ModelArgs {
-    /// Local whisper.cpp GGML model path. Overrides `--model-preset`.
+    /// Local whisper.cpp GGML model path. Defaults to `large-v3-turbo` under the
+    /// data directory's `models` folder.
     #[arg(long)]
     pub model: Option<PathBuf>,
-
-    /// Built-in model preset resolved under `models/`; ignored when `--model` is set.
-    /// Without either flag, the model is asked interactively on a terminal, otherwise
-    /// the `large-v3-turbo` preset is used.
-    #[arg(long, value_enum)]
-    pub model_preset: Option<ModelPreset>,
 
     /// Spoken language: `it` or `en`.
     #[arg(long, default_value = "it", value_parser = ["it", "en"])]
@@ -247,7 +239,7 @@ pub fn execute(command: Command) -> Result<()> {
         }
         Command::Doctor(args) => {
             let dirs = crate::paths::data_dirs(args.sessions.sessions_dir.as_deref())?;
-            let model = doctor_model_path(args.model.clone(), args.model_preset, &dirs.models);
+            let model = resolve_model(args.model.clone(), &dirs.models);
             let report = if args.probe_audio {
                 crate::diagnostics::doctor_with_audio_probe(
                     &dirs,
@@ -273,11 +265,7 @@ pub fn execute(command: Command) -> Result<()> {
                 NamePick::Skipped => None,
                 NamePick::Cancelled => return Ok(()),
             };
-            let Some(model) =
-                resolve_model(args.model.model, args.model.model_preset, &dirs.models)?
-            else {
-                return Ok(());
-            };
+            let model = resolve_model(args.model.model, &dirs.models);
             let language = args.model.language;
             let prompt = resolve_initial_prompt(args.model.asr_prompt, &language);
             let root = crate::session::run(StartOptions {
@@ -310,11 +298,7 @@ pub fn execute(command: Command) -> Result<()> {
                     InputPick::Cancelled => return Ok(()),
                 },
             };
-            let Some(model) =
-                resolve_model(args.model.model, args.model.model_preset, &dirs.models)?
-            else {
-                return Ok(());
-            };
+            let model = resolve_model(args.model.model, &dirs.models);
             let language = args.model.language;
             let prompt = resolve_initial_prompt(args.model.asr_prompt, &language);
             crate::transcribe::run(crate::transcribe::TranscribeOptions {
@@ -417,179 +401,10 @@ fn inference_config(inference: &InferenceArgs, prompt: Option<String>) -> Infere
     }
 }
 
-/// Resolve the model from explicit arguments only (no interactive prompt).
-/// `--model` wins over `--model-preset`; `None` means "ask or use the default".
-fn resolve_model_path(
-    model: Option<PathBuf>,
-    preset: Option<ModelPreset>,
-    models_dir: &Path,
-) -> Option<PathBuf> {
-    model.or_else(|| preset.map(|preset| preset.path_in(models_dir)))
-}
-
-/// Model `doctor` verifies when no flag is given: the same default `start` and
-/// `transcribe` resolve, so a green `doctor` checks the model you will run.
-fn doctor_model_path(
-    model: Option<PathBuf>,
-    preset: Option<ModelPreset>,
-    models_dir: &Path,
-) -> PathBuf {
-    model.unwrap_or_else(|| {
-        preset
-            .unwrap_or(ModelPreset::LargeV3Turbo)
-            .path_in(models_dir)
-    })
-}
-
-struct ModelOption {
-    label: String,
-    path: PathBuf,
-    available: bool,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum MenuChoice {
-    Default,
-    Select(usize),
-    Custom,
-    Cancel,
-}
-
-/// Parse a menu answer: empty is the default, a valid number selects an option,
-/// `p` asks for a custom path, `q` cancels. Anything else falls back to the default.
-fn parse_menu_selection(input: &str, option_count: usize) -> MenuChoice {
-    let trimmed = input.trim();
-    if trimmed.is_empty() {
-        return MenuChoice::Default;
-    }
-    if trimmed.eq_ignore_ascii_case("p") {
-        return MenuChoice::Custom;
-    }
-    if trimmed.eq_ignore_ascii_case("q") {
-        return MenuChoice::Cancel;
-    }
-    match trimmed.parse::<usize>() {
-        Ok(number) if (1..=option_count).contains(&number) => MenuChoice::Select(number - 1),
-        _ => MenuChoice::Default,
-    }
-}
-
-/// Presets first (always listed, marked available or not), then any other GGML
-/// files found in `models_dir`.
-fn model_menu_options(models_dir: &Path) -> Vec<ModelOption> {
-    let mut options: Vec<ModelOption> = ModelPreset::ALL
-        .iter()
-        .map(|preset| {
-            let path = preset.path_in(models_dir);
-            ModelOption {
-                label: preset
-                    .to_possible_value()
-                    .expect("every preset has a CLI name")
-                    .get_name()
-                    .to_owned(),
-                available: path.is_file(),
-                path,
-            }
-        })
-        .collect();
-    let known: Vec<PathBuf> = options.iter().map(|option| option.path.clone()).collect();
-    let Ok(entries) = std::fs::read_dir(models_dir) else {
-        return options;
-    };
-    let mut extra: Vec<ModelOption> = entries
-        .flatten()
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(std::ffi::OsStr::to_str) == Some("bin"))
-        .filter(|path| !known.contains(path))
-        .map(|path| ModelOption {
-            label: path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.display().to_string()),
-            available: true,
-            path,
-        })
-        .collect();
-    extra.sort_by(|left, right| left.label.cmp(&right.label));
-    options.extend(extra);
-    options
-}
-
-fn print_model_menu(options: &[ModelOption]) {
-    println!("Seleziona il modello per la trascrizione:");
-    for (index, option) in options.iter().enumerate() {
-        let status = if option.available {
-            "scaricato"
-        } else {
-            "mancante"
-        };
-        println!(
-            "  {}) {:<16} [{}] {}",
-            index + 1,
-            option.label,
-            status,
-            option.path.display()
-        );
-    }
-    print!(
-        "Invio = default (large-v3-turbo), numero = scegli, p = percorso personalizzato, q = annulla: "
-    );
-    let _ = std::io::stdout().flush();
-}
-
-/// Outcome of the interactive picker: a model to use, or the user cancelled.
-enum ModelPick {
-    Use(PathBuf),
-    Cancelled,
-}
-
-fn default_model(models_dir: &Path) -> ModelPick {
-    ModelPick::Use(default_model_path(models_dir))
-}
-
-/// Interactive model picker. Shown only on an interactive terminal and only when
-/// no model flag was given. Returns the `large-v3-turbo` preset on an empty answer.
-fn select_model_interactively(models_dir: &Path) -> ModelPick {
-    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
-        return default_model(models_dir);
-    }
-    let options = model_menu_options(models_dir);
-    print_model_menu(&options);
-    let mut input = String::new();
-    if std::io::stdin().read_line(&mut input).is_err() {
-        return default_model(models_dir);
-    }
-    match parse_menu_selection(&input, options.len()) {
-        MenuChoice::Default => default_model(models_dir),
-        MenuChoice::Select(index) => ModelPick::Use(
-            options
-                .get(index)
-                .map(|option| option.path.clone())
-                .unwrap_or_else(|| default_model_path(models_dir)),
-        ),
-        MenuChoice::Custom => {
-            print!("Percorso del modello (.bin): ");
-            let _ = std::io::stdout().flush();
-            let mut path = String::new();
-            if std::io::stdin().read_line(&mut path).is_err() {
-                return default_model(models_dir);
-            }
-            let path = path.trim();
-            if path.is_empty() {
-                default_model(models_dir)
-            } else {
-                ModelPick::Use(PathBuf::from(path))
-            }
-        }
-        MenuChoice::Cancel => {
-            println!("selezione annullata");
-            ModelPick::Cancelled
-        }
-    }
-}
-
-fn default_model_path(models_dir: &Path) -> PathBuf {
-    ModelPreset::LargeV3Turbo.path_in(models_dir)
+/// Resolve the model: `--model` wins, otherwise the default `large-v3-turbo`
+/// under the data directory's `models` folder.
+fn resolve_model(model: Option<PathBuf>, models_dir: &Path) -> PathBuf {
+    model.unwrap_or_else(|| default_model_path(models_dir))
 }
 
 /// Characters that make a session name unusable on any supported platform; the
@@ -601,10 +416,10 @@ const SESSION_NAME_INVALID_CHARS: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<
 fn clean_session_name(input: &str) -> std::result::Result<String, &'static str> {
     let name = input.trim().replace(' ', "_");
     if name.is_empty() {
-        return Err("inserisci un nome");
+        return Err("enter a name");
     }
     if name.contains(SESSION_NAME_INVALID_CHARS) {
-        return Err("i caratteri / \\ : * ? \" < > | non sono consentiti");
+        return Err("the characters / \\ : * ? \" < > | are not allowed");
     }
     Ok(name)
 }
@@ -626,28 +441,28 @@ enum NamePick {
     Cancelled,
 }
 
-/// Ask for the recording's repository name, used to build the
-/// `YY-MM-DD_<name>` session directory. Asked only on an interactive terminal so
-/// non-interactive runs keep the date-only name. `q` cancels, like the model menu.
+/// Ask for the session name, used to build the `YY-MM-DD_<name>` session
+/// directory. Asked only on an interactive terminal so non-interactive runs keep
+/// the date-only name. `q` cancels.
 fn select_session_name_interactively(sessions_dir: &Path) -> NamePick {
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         return NamePick::Skipped;
     }
     loop {
-        print!("Nome della repo per la registrazione (q = annulla): ");
+        print!("Session name (q = cancel): ");
         let _ = std::io::stdout().flush();
         let mut input = String::new();
         if std::io::stdin().read_line(&mut input).is_err() {
             return NamePick::Skipped;
         }
         if input.trim().eq_ignore_ascii_case("q") {
-            println!("selezione annullata");
+            println!("selection cancelled");
             return NamePick::Cancelled;
         }
         let name = match clean_session_name(&input) {
             Ok(name) => name,
             Err(reason) => {
-                println!("nome non valido: {reason}");
+                println!("invalid name: {reason}");
                 continue;
             }
         };
@@ -655,7 +470,7 @@ fn select_session_name_interactively(sessions_dir: &Path) -> NamePick {
             && directory.exists()
         {
             println!(
-                "esiste già una sessione \"{}\": scegli un altro nome",
+                "a session \"{}\" already exists: choose another name",
                 directory.file_name().unwrap_or_default().to_string_lossy()
             );
             continue;
@@ -678,7 +493,7 @@ fn select_input_path_interactively() -> Result<InputPick> {
         return Err(Error::InputRequired);
     }
     loop {
-        print!("Percorso del file audio (q = annulla): ");
+        print!("Audio file path (q = cancel): ");
         let _ = std::io::stdout().flush();
         let mut input = String::new();
         if std::io::stdin().read_line(&mut input).is_err() {
@@ -686,36 +501,20 @@ fn select_input_path_interactively() -> Result<InputPick> {
         }
         let trimmed = input.trim();
         if trimmed.eq_ignore_ascii_case("q") {
-            println!("selezione annullata");
+            println!("selection cancelled");
             return Ok(InputPick::Cancelled);
         }
         if trimmed.is_empty() {
-            println!("percorso non valido: inserisci un percorso");
+            println!("invalid path: enter a path");
             continue;
         }
         let path = PathBuf::from(trimmed);
         if !path.is_file() {
-            println!("file non trovato: {}", path.display());
+            println!("file not found: {}", path.display());
             continue;
         }
         return Ok(InputPick::Use(path));
     }
-}
-
-/// Resolve the ASR model: the `--model` flag or preset, otherwise the interactive
-/// picker. `Ok(None)` means the user cancelled the picker; the command exits cleanly.
-fn resolve_model(
-    model: Option<PathBuf>,
-    preset: Option<ModelPreset>,
-    models_dir: &Path,
-) -> Result<Option<PathBuf>> {
-    if let Some(path) = resolve_model_path(model, preset, models_dir) {
-        return Ok(Some(path));
-    }
-    Ok(match select_model_interactively(models_dir) {
-        ModelPick::Use(path) => Some(path),
-        ModelPick::Cancelled => None,
-    })
 }
 
 fn print_json(value: &impl serde::Serialize) -> Result<()> {
@@ -773,7 +572,7 @@ mod tests {
     }
 
     #[test]
-    fn start_defaults_to_the_large_v3_turbo_model_preset() {
+    fn start_defaults_to_the_large_v3_turbo_model() {
         let cli = Cli::try_parse_from(["scrib", "start"]).expect("start command should parse");
 
         let Command::Start(args) = cli.command else {
@@ -782,127 +581,47 @@ mod tests {
 
         let models_dir = Path::new("/data/Scribroom/models");
         assert_eq!(args.model.model, None);
-        assert_eq!(args.model.model_preset, None);
         assert_eq!(
-            resolve_model_path(args.model.model, args.model.model_preset, models_dir)
-                .unwrap_or_else(|| default_model_path(models_dir)),
+            resolve_model(args.model.model, models_dir),
             PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
         );
     }
 
     #[test]
-    fn start_accepts_a_model_preset() {
-        let cli = Cli::try_parse_from(["scrib", "start", "--model-preset", "large-v3-turbo"])
+    fn the_model_preset_flag_is_gone() {
+        for command in ["start", "transcribe", "doctor"] {
+            assert!(
+                Cli::try_parse_from(["scrib", command, "--model-preset", "small"]).is_err(),
+                "{command} must reject --model-preset"
+            );
+        }
+    }
+
+    #[test]
+    fn explicit_model_path_overrides_the_default() {
+        let cli = Cli::try_parse_from(["scrib", "start", "--model", "models/custom.bin"])
             .expect("start command should parse");
 
         let Command::Start(args) = cli.command else {
             panic!("expected start command");
         };
 
-        assert_eq!(args.model.model_preset, Some(ModelPreset::LargeV3Turbo));
         assert_eq!(
-            args.model
-                .model_preset
-                .unwrap()
-                .path_in(Path::new("/data/Scribroom/models")),
-            PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
-        );
-    }
-
-    #[test]
-    fn explicit_model_path_overrides_the_preset() {
-        let cli = Cli::try_parse_from([
-            "scrib",
-            "start",
-            "--model-preset",
-            "large-v3",
-            "--model",
-            "models/custom.bin",
-        ])
-        .expect("start command should parse");
-
-        let Command::Start(args) = cli.command else {
-            panic!("expected start command");
-        };
-
-        assert_eq!(
-            resolve_model_path(
-                args.model.model,
-                args.model.model_preset,
-                Path::new("/data/Scribroom/models")
-            ),
-            Some(PathBuf::from("models/custom.bin"))
-        );
-    }
-
-    #[test]
-    fn model_resolution_uses_the_preset_or_nothing() {
-        let models_dir = Path::new("/data/Scribroom/models");
-
-        assert_eq!(
-            resolve_model_path(None, Some(ModelPreset::LargeV3Turbo), models_dir),
-            Some(PathBuf::from(
-                "/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin"
-            ))
-        );
-        assert_eq!(resolve_model_path(None, None, models_dir), None);
-    }
-
-    #[test]
-    fn doctor_defaults_to_the_same_model_as_start() {
-        // `doctor` must verify the model `start`/`transcribe` will actually use,
-        // so a green check is meaningful when no model flag is passed.
-        let models_dir = Path::new("/data/Scribroom/models");
-
-        assert_eq!(
-            doctor_model_path(None, None, models_dir),
-            resolve_model_path(None, None, models_dir)
-                .unwrap_or_else(|| default_model_path(models_dir))
-        );
-        assert_eq!(
-            doctor_model_path(None, None, models_dir),
-            PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
+            resolve_model(args.model.model, Path::new("/data/Scribroom/models")),
+            PathBuf::from("models/custom.bin")
         );
     }
 
     #[test]
     fn session_name_normalizes_spaces_and_rejects_invalid_characters() {
-        assert_eq!(clean_session_name("  my repo  ").as_deref(), Ok("my_repo"));
+        assert_eq!(
+            clean_session_name("  team sync  ").as_deref(),
+            Ok("team_sync")
+        );
         assert!(clean_session_name("/etc/passwd").is_err());
         assert!(clean_session_name("weird:name*").is_err());
         assert!(clean_session_name("back\\slash").is_err());
         assert!(clean_session_name("   ").is_err());
-    }
-
-    #[test]
-    fn menu_selection_parsing() {
-        assert_eq!(parse_menu_selection("", 4), MenuChoice::Default);
-        assert_eq!(parse_menu_selection("  2 ", 4), MenuChoice::Select(1));
-        assert_eq!(parse_menu_selection("5", 4), MenuChoice::Default);
-        assert_eq!(parse_menu_selection("0", 4), MenuChoice::Default);
-        assert_eq!(parse_menu_selection("p", 4), MenuChoice::Custom);
-        assert_eq!(parse_menu_selection("abc", 4), MenuChoice::Default);
-        assert_eq!(parse_menu_selection("q", 4), MenuChoice::Cancel);
-        assert_eq!(parse_menu_selection(" Q ", 4), MenuChoice::Cancel);
-    }
-
-    #[test]
-    fn menu_lists_presets_then_extra_ggml_files() {
-        let temporary = tempfile::tempdir().expect("temp directory should be created");
-        std::fs::write(temporary.path().join("custom.bin"), b"x")
-            .expect("fixture should be written");
-        std::fs::write(temporary.path().join("notes.txt"), b"x")
-            .expect("fixture should be written");
-
-        let options = model_menu_options(temporary.path());
-
-        assert_eq!(options.len(), ModelPreset::ALL.len() + 1);
-        assert!(
-            options
-                .iter()
-                .any(|option| option.label == "custom.bin" && option.available)
-        );
-        assert!(!options.iter().any(|option| option.label == "notes.txt"));
     }
 
     #[test]

@@ -17,7 +17,7 @@ pub struct TranscribeOptions {
     pub language: String,
     pub segmenter: SegmenterConfig,
     pub inference: InferenceConfig,
-    /// Repository name chosen in the start menu; the transcript directory becomes
+    /// Session name chosen at the prompt; the transcript directory becomes
     /// `YY-MM-DD_<name>`. `None` keeps the date-only name (non-interactive runs).
     pub session_name: Option<String>,
 }
