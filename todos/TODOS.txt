@@ -26,6 +26,9 @@ A. BLOCCANTI TECNICI (in ordine, ognuno sblocca il successivo)
    L'app (a) lancia il binario come sidecar e legge i file di sessione,
    oppure (b) linka la lib Rust? Sono due architetture diverse.
    Da dichiarare prima di scrivere la UI, perché cambia tutto a valle.
+   Deciso: (b), lib linkata in-process (docs/adr/0003). Il processo
+   dell'app esegue la sessione ed è l'unico proprietario; il CLI resta
+   un client, come la UI.
 
 4. MODELLO: SOLO LARGE-V3-TURBO
    - scaricato al PRIMO AVVIO dell'app, non dentro il pacchetto
@@ -74,8 +77,11 @@ B. PRODOTTO E DISTRIBUZIONE
    shell + core nativo), niente browser né server locale.
    Primo giro: sola lettura delle sessioni esistenti (lista, dettaglio,
    export). Poi il live.
-   Il binario viaggia come sidecar dentro .app/Contents/MacOS/, quindi
-   l'utente finale non installa niente e non tocca il PATH.
+   Il binario viaggia dentro .app/Contents/MacOS/, quindi l'utente
+   finale non installa niente e non tocca il PATH.
+   Prerequisiti (dal punto 3): header WAV ricostruito in recovery,
+   `StartOptions` costruito in un posto solo e condiviso con `cli.rs`,
+   `list_sessions` nella lib.
 
 9. CORE AUDIO TAPS (sostituisce BlackHole)
    Da fare DOPO lo scheletro dell'app con bundle ID: il permesso TCC

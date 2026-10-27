@@ -20,6 +20,10 @@ _Avoid_: recording, run, job
 Una sessione che sta registrando e trascrivendo mentre la riunione è in corso.
 _Avoid_: diretta, sessione realtime
 
+**Processo di sessione**:
+Il processo che esegue una sessione live. Ne esiste al massimo uno per cartella sessioni ed è l'unico proprietario della sessione.
+_Avoid_: runner, demone, worker
+
 **Trascrizione da file**:
 La conversione in testo di un file audio già esistente. Non cattura audio e non produce una sessione.
 _Avoid_: trascrizione offline, batch
@@ -65,6 +69,10 @@ _Avoid_: fase, status
 **Azione di controllo**:
 Una richiesta di pausa, ripresa o chiusura inviata alla sessione corrente, applicata una sola volta.
 _Avoid_: comando, segnale
+
+**Client**:
+Chi osserva o controlla una sessione: il CLI e l'interfaccia dell'app desktop. Anche l'app, che esegue la propria sessione, è client di quella sessione: UI e CLI usano lo stesso controllo.
+_Avoid_: controller, proprietario, consumatore
 
 **Interruzione per silenzio**:
 La chiusura automatica di una sessione live dopo un periodo continuo senza voce.
