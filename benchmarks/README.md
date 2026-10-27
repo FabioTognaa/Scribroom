@@ -6,7 +6,7 @@ con identità di modello e input, hardware, configurazione, tempi, real-time fac
 
 ## Modelli
 
-Il modello predefinito resta
+Le misure di riferimento dei benchmark usano
 [`ggml-small-q5_1.bin`](https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin):
 
 - dimensione: 190.085.487 byte;
@@ -17,8 +17,6 @@ Il modello predefinito resta
 `asr-benchmark` accetta qualunque GGML con `--model <percorso>`. Il prodotto usa
 un solo modello, `large-v3-turbo` in Q8_0. I file che `doctor` sa verificare
 (nome, dimensione e SHA-256) sono in `src/model.rs`.
-
-Qualsiasi altro GGML si seleziona con `--model <percorso>`.
 
 ## Esecuzione
 

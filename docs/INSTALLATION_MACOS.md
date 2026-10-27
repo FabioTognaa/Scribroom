@@ -33,8 +33,9 @@ messaggio che rimanda alla build da sorgente.
 Il primo `start` o `transcribe` scarica `large-v3-turbo` (Q8_0, ~874 MB) in
 `~/Library/Application Support/Scribroom/models/`, ne verifica lo SHA-256 e lo usa.
 Su un terminale mostra una barra di avanzamento; con l'output rediretto resta
-silenzioso. Se il download si interrompe o l'hash non torna, il file parziale viene
-cancellato e il comando esce con un errore.
+silenzioso. Se il download si interrompe, il file parziale resta e la successiva
+esecuzione riprende da dove era; se l'hash non torna, il parziale viene cancellato
+e il comando esce con un errore.
 
 Per usare un GGML che hai già:
 

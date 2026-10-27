@@ -5,7 +5,6 @@ use std::time::Duration;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use crate::domain::{ControlAction, InferenceConfig, SegmenterConfig};
-use crate::model::default_model_path;
 use crate::session::StartOptions;
 use crate::{Error, Result};
 
@@ -239,17 +238,17 @@ pub fn execute(command: Command) -> Result<()> {
         }
         Command::Doctor(args) => {
             let dirs = crate::paths::data_dirs(args.sessions.sessions_dir.as_deref())?;
-            let model = doctor_model_path(args.model.clone(), &dirs.models);
+            let model = args.model.clone();
             let report = if args.probe_audio {
                 crate::diagnostics::doctor_with_audio_probe(
                     &dirs,
-                    &model,
+                    model.as_deref(),
                     args.microphone.as_deref(),
                     args.system_audio.as_deref(),
                     DOCTOR_PROBE_DURATION,
                 )
             } else {
-                crate::diagnostics::doctor(&dirs, &model)
+                crate::diagnostics::doctor(&dirs, model.as_deref())
             };
             print_json(&report)?;
             if report.ready {
@@ -408,12 +407,6 @@ fn resolve_model(model: Option<PathBuf>, models_dir: &Path) -> Result<PathBuf> {
         Some(path) => Ok(path),
         None => crate::model::ensure_default_model(models_dir, crate::model::DEFAULT_MODEL_URL),
     }
-}
-
-/// Model `doctor` verifies when no flag is given. Same default as `start` and
-/// `transcribe`, but never downloads: `doctor` stays read-only.
-fn doctor_model_path(model: Option<PathBuf>, models_dir: &Path) -> PathBuf {
-    model.unwrap_or_else(|| default_model_path(models_dir))
 }
 
 /// Characters that make a session name unusable on any supported platform; the
@@ -581,32 +574,14 @@ mod tests {
     }
 
     #[test]
-    fn start_defaults_to_the_large_v3_turbo_model() {
+    fn start_without_a_model_flag_leaves_the_model_to_the_default() {
         let cli = Cli::try_parse_from(["scrib", "start"]).expect("start command should parse");
 
         let Command::Start(args) = cli.command else {
             panic!("expected start command");
         };
 
-        let models_dir = Path::new("/data/Scribroom/models");
         assert_eq!(args.model.model, None);
-        assert_eq!(
-            doctor_model_path(args.model.model, models_dir),
-            PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
-        );
-    }
-
-    #[test]
-    fn doctor_defaults_to_the_same_model_as_start() {
-        // `doctor` must verify the model `start`/`transcribe` would use, so a
-        // green check is meaningful when no model flag is passed. It resolves
-        // the same default without downloading anything.
-        let models_dir = Path::new("/data/Scribroom/models");
-
-        assert_eq!(
-            doctor_model_path(None, models_dir),
-            default_model_path(models_dir)
-        );
     }
 
     #[test]

@@ -63,9 +63,7 @@ pub enum Error {
     #[error("another process is downloading the model; retry when it finishes")]
     ModelDownloadBusy,
 
-    #[error(
-        "the downloaded model does not match the documented sha256 (expected {expected}, got {actual}); the file was removed"
-    )]
+    #[error("the model does not match the documented sha256 (expected {expected}, got {actual})")]
     ModelChecksum { expected: String, actual: String },
 
     #[error("an input audio file is required; pass its path as an argument")]

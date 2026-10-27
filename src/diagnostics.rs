@@ -87,13 +87,13 @@ pub fn audio_devices() -> Result<DeviceInventory> {
     })
 }
 
-pub fn doctor(dirs: &DataDirs, model: &Path) -> DoctorReport {
+pub fn doctor(dirs: &DataDirs, model: Option<&Path>) -> DoctorReport {
     doctor_internal(dirs, model, None)
 }
 
 pub fn doctor_with_audio_probe(
     dirs: &DataDirs,
-    model: &Path,
+    model: Option<&Path>,
     microphone: Option<&str>,
     system_audio: Option<&str>,
     duration: Duration,
@@ -103,19 +103,21 @@ pub fn doctor_with_audio_probe(
 
 fn doctor_internal(
     dirs: &DataDirs,
-    model: &Path,
+    model: Option<&Path>,
     audio_probe: Option<(Option<&str>, Option<&str>, Duration)>,
 ) -> DoctorReport {
+    let is_default_model = model.is_none();
+    let model = model.map_or_else(
+        || crate::model::default_model_path(&dirs.models),
+        Path::to_path_buf,
+    );
     let mut checks = vec![
         platform_check(),
         data_directory_check(dirs),
         sessions_directory_check(&dirs.sessions),
     ];
     checks.push(disk_space_check(&dirs.sessions));
-    checks.push(model_check(
-        model,
-        model == crate::model::default_model_path(&dirs.models),
-    ));
+    checks.push(model_check(&model, is_default_model));
     checks.extend(device_checks());
     match audio_probe {
         Some((microphone, system_audio, duration)) => {

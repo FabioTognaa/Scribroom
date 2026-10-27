@@ -110,13 +110,24 @@ pub const DEFAULT_MODEL_URL: &str =
 /// An existing file is trusted as-is: `doctor` verifies its identity, and a
 /// user-supplied `--model` never reaches here.
 pub fn ensure_default_model(models_dir: &Path, url: &str) -> Result<PathBuf> {
+    let known = known_model(DEFAULT_MODEL_FILE).expect("the default model is documented");
     let path = default_model_path(models_dir);
     if path.is_file() {
+        let identity = crate::asr::model_identity(&path)?;
+        if identity.sha256 != known.sha256 {
+            return Err(checksum_mismatch(known, identity.sha256));
+        }
         return Ok(path);
     }
-    let known = known_model(DEFAULT_MODEL_FILE).expect("the default model is documented");
     download_verified_model(url, &path, known)?;
     Ok(path)
+}
+
+fn checksum_mismatch(expected: &KnownModel, actual: String) -> Error {
+    Error::ModelChecksum {
+        expected: expected.sha256.to_owned(),
+        actual,
+    }
 }
 
 /// Exclusive lock for the model download. `flock` releases it when the process
@@ -148,16 +159,18 @@ fn lock_download(_destination: &Path) -> Result<()> {
 fn download_verified_model(url: &str, destination: &Path, expected: &KnownModel) -> Result<()> {
     let parent = destination.parent().unwrap_or_else(|| Path::new("."));
     std::fs::create_dir_all(parent)?;
+    // The partial name is stable so an interrupted download resumes with `-C -`.
+    let partial = destination.with_extension("part");
+    let resumed_bytes = std::fs::metadata(&partial).map_or(0, |metadata| metadata.len());
     crate::validation::ensure_disk_space(
         parent,
         expected
             .size_bytes
+            .saturating_sub(resumed_bytes)
             .saturating_add(crate::validation::SESSION_DISK_HEADROOM_BYTES),
     )?;
     let _lock = lock_download(destination)?;
 
-    // The partial name is stable so an interrupted download resumes with `-C -`.
-    let partial = destination.with_extension("part");
     eprintln!(
         "downloading {} ({} MB) from {url}",
         expected.file_name,
@@ -192,22 +205,29 @@ fn download_verified_model(url: &str, destination: &Path, expected: &KnownModel)
             },
         })?;
     if !status.success() {
-        // Keep the partial file: the next attempt resumes from its size.
+        // A partial at least as large as the artifact can only be stale (the
+        // release changed size); `-C -` would fail on it forever, so discard it.
+        let stale =
+            std::fs::metadata(&partial).is_ok_and(|metadata| metadata.len() >= expected.size_bytes);
+        if stale {
+            let _ = std::fs::remove_file(&partial);
+        }
         return Err(Error::ModelDownload {
             url: url.to_owned(),
-            reason: format!(
-                "curl exited with {status}; check the connection or pass --model <path>"
-            ),
+            reason: if stale {
+                format!(
+                    "curl exited with {status}; the stale partial download was discarded, retry"
+                )
+            } else {
+                format!("curl exited with {status}; check the connection or pass --model <path>")
+            },
         });
     }
 
     let actual = crate::asr::sha256_file(&partial)?;
     if actual != expected.sha256 {
         let _ = std::fs::remove_file(&partial);
-        return Err(Error::ModelChecksum {
-            expected: expected.sha256.to_owned(),
-            actual,
-        });
+        return Err(checksum_mismatch(expected, actual));
     }
 
     if destination.exists() {
@@ -215,10 +235,7 @@ fn download_verified_model(url: &str, destination: &Path, expected: &KnownModel)
         let _ = std::fs::remove_file(&partial);
         let identity = crate::asr::model_identity(destination)?;
         if identity.sha256 != expected.sha256 {
-            return Err(Error::ModelChecksum {
-                expected: expected.sha256.to_owned(),
-                actual: identity.sha256,
-            });
+            return Err(checksum_mismatch(expected, identity.sha256));
         }
         return Ok(());
     }
@@ -368,15 +385,16 @@ mod tests {
     }
 
     #[test]
-    fn ensure_default_model_accepts_an_existing_file_without_downloading() {
+    fn ensure_default_model_rejects_an_unverified_existing_file() {
         let temporary = tempfile::tempdir().expect("temp directory should be created");
         let path = default_model_path(temporary.path());
         std::fs::write(&path, MODEL_BYTES).expect("fixture should be written");
 
-        let resolved = ensure_default_model(temporary.path(), "file:///definitely/missing")
-            .expect("an existing model should not trigger a download");
+        // The unreachable URL proves the rejection happens before any download.
+        let error = ensure_default_model(temporary.path(), "file:///definitely/missing")
+            .expect_err("an existing file must still match the documented model");
 
-        assert_eq!(resolved, path);
+        assert!(matches!(error, Error::ModelChecksum { .. }), "{error}");
     }
 
     #[test]
