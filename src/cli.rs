@@ -239,7 +239,7 @@ pub fn execute(command: Command) -> Result<()> {
         }
         Command::Doctor(args) => {
             let dirs = crate::paths::data_dirs(args.sessions.sessions_dir.as_deref())?;
-            let model = resolve_model(args.model.clone(), &dirs.models);
+            let model = doctor_model_path(args.model.clone(), &dirs.models);
             let report = if args.probe_audio {
                 crate::diagnostics::doctor_with_audio_probe(
                     &dirs,
@@ -265,7 +265,7 @@ pub fn execute(command: Command) -> Result<()> {
                 NamePick::Skipped => None,
                 NamePick::Cancelled => return Ok(()),
             };
-            let model = resolve_model(args.model.model, &dirs.models);
+            let model = resolve_model(args.model.model, &dirs.models)?;
             let language = args.model.language;
             let prompt = resolve_initial_prompt(args.model.asr_prompt, &language);
             let root = crate::session::run(StartOptions {
@@ -298,7 +298,7 @@ pub fn execute(command: Command) -> Result<()> {
                     InputPick::Cancelled => return Ok(()),
                 },
             };
-            let model = resolve_model(args.model.model, &dirs.models);
+            let model = resolve_model(args.model.model, &dirs.models)?;
             let language = args.model.language;
             let prompt = resolve_initial_prompt(args.model.asr_prompt, &language);
             crate::transcribe::run(crate::transcribe::TranscribeOptions {
@@ -402,8 +402,17 @@ fn inference_config(inference: &InferenceArgs, prompt: Option<String>) -> Infere
 }
 
 /// Resolve the model: `--model` wins, otherwise the default `large-v3-turbo`
-/// under the data directory's `models` folder.
-fn resolve_model(model: Option<PathBuf>, models_dir: &Path) -> PathBuf {
+/// under the data directory's `models` folder, downloading it when missing.
+fn resolve_model(model: Option<PathBuf>, models_dir: &Path) -> Result<PathBuf> {
+    match model {
+        Some(path) => Ok(path),
+        None => crate::model::ensure_default_model(models_dir, crate::model::DEFAULT_MODEL_URL),
+    }
+}
+
+/// Model `doctor` verifies when no flag is given. Same default as `start` and
+/// `transcribe`, but never downloads: `doctor` stays read-only.
+fn doctor_model_path(model: Option<PathBuf>, models_dir: &Path) -> PathBuf {
     model.unwrap_or_else(|| default_model_path(models_dir))
 }
 
@@ -582,8 +591,21 @@ mod tests {
         let models_dir = Path::new("/data/Scribroom/models");
         assert_eq!(args.model.model, None);
         assert_eq!(
-            resolve_model(args.model.model, models_dir),
+            doctor_model_path(args.model.model, models_dir),
             PathBuf::from("/data/Scribroom/models/ggml-large-v3-turbo-q8_0.bin")
+        );
+    }
+
+    #[test]
+    fn doctor_defaults_to_the_same_model_as_start() {
+        // `doctor` must verify the model `start`/`transcribe` would use, so a
+        // green check is meaningful when no model flag is passed. It resolves
+        // the same default without downloading anything.
+        let models_dir = Path::new("/data/Scribroom/models");
+
+        assert_eq!(
+            doctor_model_path(None, models_dir),
+            default_model_path(models_dir)
         );
     }
 
@@ -607,7 +629,8 @@ mod tests {
         };
 
         assert_eq!(
-            resolve_model(args.model.model, Path::new("/data/Scribroom/models")),
+            resolve_model(args.model.model, Path::new("/data/Scribroom/models"))
+                .expect("an explicit path never downloads"),
             PathBuf::from("models/custom.bin")
         );
     }

@@ -314,11 +314,24 @@ fn model_check(model: &Path) -> DoctorCheck {
                 ),
             },
         },
-        Err(error) => DoctorCheck {
-            name: "model",
-            status: CheckStatus::Fail,
-            detail: error.to_string(),
-        },
+        Err(error) => {
+            let is_missing_default = !model.exists()
+                && model.file_name().and_then(|name| name.to_str())
+                    == Some(crate::model::DEFAULT_MODEL_FILE);
+            let detail = if is_missing_default {
+                format!(
+                    "{} is missing; it will be downloaded on the first start",
+                    model.display()
+                )
+            } else {
+                error.to_string()
+            };
+            DoctorCheck {
+                name: "model",
+                status: CheckStatus::Fail,
+                detail,
+            }
+        }
     }
 }
 
@@ -413,6 +426,19 @@ mod tests {
         let check = model_check(Path::new("/definitely/missing/model.bin"));
 
         assert_eq!(check.status, CheckStatus::Fail);
+    }
+
+    #[test]
+    fn a_missing_default_model_explains_the_first_start_download() {
+        let temporary = tempfile::tempdir().expect("temp directory should be created");
+        let model = temporary
+            .path()
+            .join(crate::model::DEFAULT_MODEL_FILE);
+
+        let check = model_check(&model);
+
+        assert_eq!(check.status, CheckStatus::Fail);
+        assert!(check.detail.contains("downloaded on the first start"));
     }
 
     #[test]

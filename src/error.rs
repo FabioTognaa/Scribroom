@@ -57,6 +57,14 @@ pub enum Error {
     #[error("a local whisper model is required; pass --model <GGML .bin>")]
     ModelRequired,
 
+    #[error("cannot download the model from {url}: {reason}")]
+    ModelDownload { url: String, reason: String },
+
+    #[error(
+        "the downloaded model does not match the documented sha256 (expected {expected}, got {actual}); the file was removed"
+    )]
+    ModelChecksum { expected: String, actual: String },
+
     #[error("an input audio file is required; pass its path as an argument")]
     InputRequired,
 
