@@ -21,3 +21,12 @@ jobs:
         run: cargo test
       - name: Build release
         run: cargo build --release
+      - name: Package
+        run: |
+          mkdir -p dist
+          tar -czf dist/scrib-aarch64-apple-darwin.tar.gz -C target/release scrib
+          (cd dist && shasum -a 256 scrib-aarch64-apple-darwin.tar.gz > scrib-aarch64-apple-darwin.tar.gz.sha256)
+      - name: Installer smoke test
+        run: |
+          SCRIB_INSTALL_BASE_URL="file://$PWD/dist" sh install.sh
+          scrib --version
