@@ -84,9 +84,9 @@ _Avoid_: watchdog, timeout di inattività
 Il file di pesi Whisper usato per produrre una trascrizione.
 _Avoid_: pesi, AI, engine
 
-**Preset**:
-Il nome con cui la riga di comando indica un modello documentato, per esempio `large-v3-turbo`.
-_Avoid_: alias, scorciatoia
+**Modello predefinito**:
+L'unico modello che l'applicazione scarica e usa senza flag: `large-v3-turbo` in Q8_0.
+_Avoid_: preset, modello di default
 
 **Identità del modello**:
 Il nome e l'impronta SHA-256 registrati con una trascrizione, così si sa con quale modello è stata prodotta.

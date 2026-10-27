@@ -91,30 +91,22 @@ opzioni **VAD** e di **inferenza** valgono per `start` e `transcribe`.
 
 ### Modello e lingua
 
-| Opzione                 | Tipo         | Default                         | Descrizione                                                                                           |
-| ----------------------- | ------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `--model <PERCORSO>`    | percorso     | —                               | File GGML locale. Ha la precedenza su `--model-preset`.                                               |
-| `--model-preset <NOME>` | enum         | `large-v3-turbo`                | Modello documentato risolto in `models/` dentro la cartella dati. Valori: `small`, `medium`, `large-v3-turbo`, `large-v3`. |
-| `--language <LINGUA>`   | `it` \| `en` | `it`                            | Lingua parlata, valida per tutta la sessione o per l'intero file. Nessun rilevamento automatico.      |
-| `--asr-prompt <TESTO>`  | testo        | prompt predefinito della lingua | Prompt iniziale per Whisper. `--asr-prompt ""` lo disattiva.                                          |
+Il prodotto usa un solo modello: `large-v3-turbo` in Q8_0
+(`ggml-large-v3-turbo-q8_0.bin`, ~874 MB), cercato in `models/` dentro la cartella
+dati (`~/Library/Application Support/Scribroom/models/` su macOS), non nella
+directory da cui lanci il comando. Se il file manca, il primo `start` o
+`transcribe` lo scarica, ne verifica lo SHA-256 e lo mette nella cartella; `doctor`
+non scarica mai e segnala il file mancante.
 
-Se non si passa né `--model` né `--model-preset` e si lancia `start` da un
-terminale interattivo, compare un menu dei modelli; senza terminale (script, CI,
-test) il menu non compare e vale `large-v3-turbo`. Dal menu, `q` annulla la scelta e non
-avvia nulla.
+| Opzione                 | Tipo         | Default                  | Descrizione                                                                                      |
+| ----------------------- | ------------ | ------------------------ | ------------------------------------------------------------------------------------------------ |
+| `--model <PERCORSO>`    | percorso     | modello predefinito      | File GGML locale. Se passato non scarica nulla: il file deve esistere.                            |
+| `--language <LINGUA>`   | `it` \| `en` | `it`                     | Lingua parlata, valida per tutta la sessione o per l'intero file. Nessun rilevamento automatico. |
+| `--asr-prompt <TESTO>`  | testo        | prompt predefinito della lingua | Prompt iniziale per Whisper. `--asr-prompt ""` lo disattiva.                              |
 
-Preset e file documentati:
-
-| Preset           | File nella cartella modelli            | Dimensione |
-| ---------------- | ------------------------------------- | ---------- |
-| `small`          | `ggml-small-q5_1.bin`                 | ~190 MB    |
-| `medium`         | `ggml-medium-q5_0.bin`                | ~540 MB    |
-| `large-v3-turbo` | `ggml-large-v3-turbo-q8_0.bin`        | ~874 MB    |
-| `large-v3`       | `ggml-large-v3-q5_0.bin`              | ~1,1 GB    |
-
-I modelli si cercano in `models/` dentro la cartella dati
-(`~/Library/Application Support/Scribroom/models/` su macOS), non nella directory da
-cui lanci il comando. `--model` accetta qualunque percorso.
+Un GGML diverso si seleziona solo con `--model`, che ha la precedenza sul modello
+predefinito. I file noti a `doctor` sono elencati in `KNOWN_MODELS`; un nome non
+documentato passa con un avviso, senza verifica di identità.
 
 ### Segmentazione vocale (VAD)
 
@@ -165,8 +157,7 @@ l'exit code è diverso da zero.
 
 | Opzione                     | Tipo     | Default                 | Descrizione                                                                                            |
 | --------------------------- | -------- | ----------------------- | ------------------------------------------------------------------------------------------------------ |
-| `--model <PERCORSO>`        | percorso | preset `large-v3-turbo` | Modello da verificare. Ha la precedenza su `--model-preset`.                                           |
-| `--model-preset <NOME>`     | enum     | `large-v3-turbo`        | Preset da verificare se `--model` non è passato.                                                       |
+| `--model <PERCORSO>`        | percorso | modello predefinito     | Modello da verificare. Senza flag controlla il `large-v3-turbo` della cartella modelli; non scarica.   |
 | `--probe-audio`             | flag     | spento                  | Apre entrambi gli input live per tre secondi e verifica che arrivi segnale, senza creare una sessione. |
 | `--microphone <NOME>`       | testo    | input predefinito       | Microfono usato dal probe. Richiede `--probe-audio`.                                                   |
 | `--system-audio <NOME>`     | testo    | BlackHole               | Input di sistema usato dal probe. Richiede `--probe-audio`.                                            |
@@ -186,8 +177,7 @@ scrib start [opzioni]
 | `--microphone <NOME>`          | testo        | input predefinito  | Dispositivo del microfono.           |
 | `--system-audio <NOME>`        | testo        | BlackHole rilevato | Dispositivo dell'audio di sistema.   |
 | `--silence-timeout <MINUTI>`   | intero 1–30  | `15`               | Chiude la sessione dopo N minuti di silenzio consecutivo. |
-| `--model <PERCORSO>`           | percorso     | —                  | Vedi “Modello e lingua”.             |
-| `--model-preset <NOME>`        | enum         | `large-v3-turbo`   | Vedi “Modello e lingua”.             |
+| `--model <PERCORSO>`           | percorso     | predefinito        | Vedi “Modello e lingua”.             |
 | `--language <LINGUA>`          | `it` \| `en` | `it`               | Vedi “Modello e lingua”.             |
 | `--asr-prompt <TESTO>`         | testo        | predefinito lingua | Vedi “Modello e lingua”.             |
 | `--vad-threshold <NUMERO>`     | decimale     | `0.02`             | Vedi “Segmentazione vocale”.         |
@@ -223,8 +213,7 @@ con `-v`.
 | Argomento/Opzione              | Tipo         | Default                                      | Descrizione                                    |
 | ------------------------------ | ------------ | -------------------------------------------- | ---------------------------------------------- |
 | `<FILE>` (argomento)           | percorso     | opzionale (richiesto su terminale se omesso) | Input `.wav`, `.mp3`, `.m4a`, `.mp4` o `.aac`. |
-| `--model <PERCORSO>`           | percorso     | —                                            | Vedi “Modello e lingua”.                       |
-| `--model-preset <NOME>`        | enum         | `large-v3-turbo`                             | Vedi “Modello e lingua”.                       |
+| `--model <PERCORSO>`           | percorso     | predefinito                                  | Vedi “Modello e lingua”.                       |
 | `--language <LINGUA>`          | `it` \| `en` | `it`                                         | Vedi “Modello e lingua”.                       |
 | `--asr-prompt <TESTO>`         | testo        | predefinito lingua                           | Vedi “Modello e lingua”.                       |
 | `--vad-threshold <NUMERO>`     | decimale     | `0.02`                                       | Vedi “Segmentazione vocale”.                   |

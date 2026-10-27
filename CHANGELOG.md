@@ -5,28 +5,47 @@ Tutte le modifiche rilevanti per gli utenti saranno documentate in questo file.
 Il formato segue [Keep a Changelog](https://keepachangelog.com/it/1.1.0/) e il
 progetto aderisce a [Semantic Versioning](https://semver.org/lang/it/).
 
-## [Unreleased]
+## [1.1.0] - 2026-10-27
 
 ### Added
 
+- Installazione con un comando: `curl -fsSL …/releases/latest/download/install.sh | sh`
+  scarica il tarball dell'ultima release, verifica lo SHA-256 e mette `scrib` nel
+  prefix di Homebrew o in `/usr/local/bin`. Non tocca il PATH; rilanciarlo aggiorna.
+- Il primo `start` o `transcribe` scarica `large-v3-turbo` (Q8_0, ~874 MB) se manca,
+  con controllo dello spazio disco, retry, ripresa del file parziale, barra di
+  avanzamento su terminale e verifica SHA-256 prima della rinomina. Senza rete
+  l'errore rimanda a `--model`.
+- Workflow di release su tag `v*`: tarball `arm64`, checksum e `install.sh` allegati
+  alla release; la CI installa l'artefatto appena compilato per provare lo script.
 - `config.json` opzionale nella cartella dati sposta `sessions/` e `models/`
   (`sessions_dir`, `models_dir`): percorsi assoluti o con `~`, chiavi sconosciute
   ignorate, JSON malformato o vuoto rifiutato con un errore esplicito.
 - `SCRIB_DATA_DIR` sposta l'intera cartella dati per la modalità sviluppo e batte
   il config; `SCRIB_DATA_DIR=.` riporta `sessions/` e `models/` nella directory
   corrente.
-- `start` e `transcribe` chiedono il nome della repo prima del modello e nominano
-  la cartella `YY-MM-DD_<repo>`: gli spazi diventano `_`, i caratteri non validi
+- `start` e `transcribe` chiedono il nome della sessione prima del modello e nominano
+  la cartella `YY-MM-DD_<nome>`: gli spazi diventano `_`, i caratteri non validi
   (`/ \ : * ? " < > |`) e i nomi già usati vengono segnalati e richiesti di nuovo,
-  `q` annulla come nel menù del modello. `transcribe` chiede anche il percorso del
-  file audio quando non è passato sulla riga di comando. Senza terminale
-  interattivo resta il nome `YY-MM-DD`.
+  `q` annulla. `transcribe` chiede anche il percorso del file audio quando non è
+  passato sulla riga di comando. Senza terminale interattivo resta il nome
+  `YY-MM-DD`.
 - `start` chiude da solo la sessione dopo N minuti consecutivi di silenzio
   (`--silence-timeout`, intero 1–30, default 15): conta il tempo audio, non si
   ferma durante `pause`, registra l'evento `silence_timeout` e lascia la sessione
   `completed`. La chiusura automatica è annunciata su stderr in inglese.
 
 ### Changed
+
+- Il prodotto usa un solo modello: `large-v3-turbo`. `start`, `transcribe` e
+  `doctor` risolvono quello nella cartella modelli; `doctor` spiega che il primo
+  `start` lo scarica.
+- I messaggi interattivi di `start` e `transcribe` sono in inglese, come gli errori.
+
+### Removed
+
+- `--model-preset`, i preset `small`, `medium` e `large-v3` e il menu interattivo
+  del modello. Per un GGML diverso resta `--model <percorso>`.
 
 - Il prodotto si chiama Scribroom. Il comando resta `scrib`: package, libreria e
   binario non cambiano. La cartella dati si sposta da `Scrib/` a `Scribroom/`, e i

@@ -2,80 +2,91 @@
 
 ## Requisiti
 
-- macOS su Apple Silicon
-- Rust 1.88+
-- BlackHole.
+- macOS su Apple Silicon. I binari pubblicati sono `arm64`; su Intel la build da
+  sorgente è l'unica strada.
+- BlackHole, **solo per registrare una call live** (`start`). Per trascrivere un
+  file già esistente (`transcribe`) non serve.
 
-Installare e configurare BlackHole (se ancora non lo si possiede sulla machcina) seguendo la [guida macOS](BLACKHOLE_MACOS.md), quindi
-installare:
-
-## 1. Clonazione e installazione
+## 1. Installazione con un comando
 
 ```sh
-git clone https://github.com/FabioTognaa/Scribroom.git
-cd Scribroom
-cargo install --path .
+curl -fsSL https://github.com/FabioTognaa/Scribroom/releases/latest/download/install.sh | sh
 ```
 
-Da qui in poi i comandi usano `scrib`, che `cargo install` mette nel `PATH`
-(`~/.cargo/bin`). Se preferisci non installarlo, compila con
-`cargo build --release` ed esegui `./target/release/scrib` al posto di `scrib`.
+Lo script scarica il tarball dell'ultima release, ne verifica lo SHA-256 e installa
+`scrib` in `$(brew --prefix)/bin` se Homebrew è presente, altrimenti in
+`/usr/local/bin` (chiede la password solo se la cartella non è scrivibile). Non
+modifica il PATH e non scarica il modello. Rilanciare lo stesso comando aggiorna
+un'installazione esistente.
 
-Verifica i prerequisiti locali:
+Verifica:
+
+```sh
+scrib --version
+```
+
+Se il sistema non è macOS o l'architettura non è `arm64`, lo script si ferma con un
+messaggio che rimanda alla build da sorgente.
+
+## 2. Il modello
+
+Il primo `start` o `transcribe` scarica `large-v3-turbo` (Q8_0, ~874 MB) in
+`~/Library/Application Support/Scribroom/models/`, ne verifica lo SHA-256 e lo usa.
+Su un terminale mostra una barra di avanzamento; con l'output rediretto resta
+silenzioso. Se il download si interrompe o l'hash non torna, il file parziale viene
+cancellato e il comando esce con un errore.
+
+Per usare un GGML che hai già:
+
+```sh
+scrib start --model /percorso/del/modello.bin
+```
+
+`--model` ha la precedenza sul modello predefinito e non scarica nulla. Senza rete e
+senza `--model`, il comando fallisce spiegando le due opzioni.
+
+## 3. Verifica dei prerequisiti
 
 ```sh
 scrib doctor
 ```
 
 Stampa un report JSON: se qualcosa manca, il controllo corrispondente è `fail`,
-`ready` è `false` e il comando esce con codice diverso da zero.
+`ready` è `false` e il comando esce con codice diverso da zero. Il modello risulta
+mancante finché non fai il primo `start`; il dettaglio spiega che verrà scaricato.
+Per provare anche microfono e audio di sistema servono BlackHole configurato e
+`--probe-audio`.
 
-## 2. Modelli
+## 4. Prima trascrizione
 
-ATTENZIONE: i modelli quantizzati sono molteplici e non sono inclusi nel repo di
-default. È possibile scaricarli tramite i comandi elencati qui sotto.
-
-Scaricare il modello predefinito nella cartella dati:
-
-```sh
-mkdir -p "$HOME/Library/Application Support/Scribroom/models"
-curl -fL \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q8_0.bin \
-  -o "$HOME/Library/Application Support/Scribroom/models/ggml-large-v3-turbo-q8_0.bin"
-```
-
-Per un modello più leggero c'è `small`:
+Per una call live, installa e configura BlackHole seguendo la
+[guida macOS](BLACKHOLE_MACOS.md), poi:
 
 ```sh
-curl -fL \
-  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin \
-  -o "$HOME/Library/Application Support/Scribroom/models/ggml-small-q5_1.bin"
+scrib start --language it
 ```
 
-### Scelta del modello
-
-Se avvii `start` da un terminale comparirà un menu che elenca i preset con lo stato `[scaricato]`/`[mancante]` e gli altri
-file `.bin` presenti nella cartella `models/` della cartella dati; si può selezionare quello con cui si desidera procedere.
-
-Consiglio caldamente di usare `large-v3-turbo` per la trascrizione, la qualità del prodotto finale è superiore, anche se richiede un effort più imposrtante lato processore e memoria.
-
-`--model-preset` è il flag da accompagnare a `start` che consente di selezionare un modello specifico tra quelli documentati senza scrivere percorsi.
-Il valore predefinito è `large-v3-turbo`; `small` resta l'opzione leggera per macchine con poca memoria.
-
-Un file GGML qualsiasi siseleziona con `--model <percorso>`, che ha la precedenza sul preset.
-
-Esempio di utilizzo:
+`scrib status`, `scrib pause`, `scrib resume` e `scrib stop` agiscono sulla sessione
+corrente. Per un file già registrato, senza BlackHole:
 
 ```sh
-scrib start --model-preset large-v3-turbo --language it
+scrib transcribe riunione.mp3 --language it
 ```
 
-In alternativa, senza installare `scrib`, la stessa cosa in modalità sviluppo:
+## 5. Sviluppo
+
+Con il repository clonato e Rust 1.88+:
 
 ```sh
-cargo run --release -- start --model-preset large-v3-turbo --language it
+cargo run --release -- start
 ```
 
-Su Apple Silicon con almeno 16 GiB, `large-v3-turbo` e `large-v3` restano sotto
-il real-time factor 1 con margine ampio; le versioni F16 (`ggml-large-v3-turbo.bin`,
-`ggml-large-v3.bin`) sono selezionabili con `--model` per la massima accuratezza.
+Per installare la build locale invece del binario della release:
+
+```sh
+cargo install --path .
+```
+
+`SCRIB_DATA_DIR=.` riporta `sessions/` e `models/` nella directory corrente. Il
+dettaglio di percorsi, config e precedenza è in
+[Comandi e opzioni](COMMANDS_HELP.md#cartella-dati-config-e-scrib_data_dir).

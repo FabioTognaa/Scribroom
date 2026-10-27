@@ -17,6 +17,14 @@ L'intera pipeline di lavoro si svolge in locale, così come la conservazione di 
 
 Attualmente il programma e' in fase di pre-release ed è destinata a macOS Apple Silicon, in arrivo versioni compatibili anche per altri sistemi operativi...
 
+Su macOS Apple Silicon si installa con un comando, senza clonare il repository e senza Rust:
+
+```sh
+curl -fsSL https://github.com/FabioTognaa/Scribroom/releases/latest/download/install.sh | sh
+```
+
+Il primo `start` o `transcribe` scarica da solo il modello (`large-v3-turbo`, ~874 MB) e ne verifica lo SHA-256. Dettagli e alternative in [Installazione per MacOS Apple Silicon](docs/INSTALLATION_MACOS.md).
+
 ### [Installazione per MacOS Apple Silicon](docs/INSTALLATION_MACOS.md)
 
 ### [Installazione per Windows](docs/INSTALLATION_WINDOWS.md)
@@ -81,6 +89,8 @@ Per quanto riguarda i formati wav, ad oggi non c'è ancora una funzione nativa c
 - I file delle sessioni non sono cifrati a riposo.
 - Il rilevamento del parlato usa una soglia energetica RMS, non un modello VAD.
 - La cattura live non è ancora stata validata end-to-end su una call reale.
+- Il primo `start` o `transcribe` scarica il modello (~874 MB) se non è già
+  presente; senza rete serve `--model`.
 - `transcribe` elabora un file alla volta e in un solo thread: nel formato
   leggero non esistono pause, ripresa o stato di avanzamento.
 
@@ -89,7 +99,8 @@ Per quanto riguarda i formati wav, ad oggi non c'è ancora una funzione nativa c
 Sessioni, modelli e configurazione non stanno nella directory da cui lanci il
 comando, ma in una cartella dati per utente:
 `~/Library/Application Support/Scribroom/` su macOS, con dentro `sessions/`,
-`models/` e un `config.json` opzionale.
+`models/` e un `config.json` opzionale. Se il modello predefinito manca, il primo
+`start` o `transcribe` lo scarica e lo verifica; `doctor` non scarica mai.
 
 Il config sposta le due sottocartelle, con percorsi assoluti o che iniziano con
 `~`:
