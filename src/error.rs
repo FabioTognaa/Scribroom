@@ -57,6 +57,9 @@ pub enum Error {
     #[error("a local whisper model is required; pass --model <GGML .bin>")]
     ModelRequired,
 
+    #[error("an audio file is required; pass it on the command line or run on a terminal")]
+    InputRequired,
+
     #[error("invalid inference configuration: {0}")]
     InvalidInferenceConfig(String),
 

@@ -1,5 +1,6 @@
 use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
@@ -94,6 +95,10 @@ pub struct StartArgs {
     #[arg(long)]
     pub system_audio: Option<String>,
 
+    /// Minutes of consecutive silence after which the session closes itself.
+    #[arg(long, default_value_t = 15, value_parser = clap::value_parser!(u64).range(1..=30))]
+    pub silence_timeout: u64,
+
     #[command(flatten)]
     pub model: ModelArgs,
 
@@ -109,8 +114,9 @@ pub struct StartArgs {
 
 #[derive(Debug, Args)]
 pub struct TranscribeArgs {
-    /// Audio file to transcribe (`.wav`, `.mp3`, `.m4a`, `.mp4`, `.aac`).
-    pub input: PathBuf,
+    /// Audio file to transcribe (`.wav`, `.mp3`, `.m4a`, `.mp4`, `.aac`). Asked
+    /// interactively on a terminal when omitted.
+    pub input: Option<PathBuf>,
 
     #[command(flatten)]
     pub model: ModelArgs,
@@ -238,6 +244,12 @@ pub fn execute(command: Command) -> Result<()> {
             }
         }
         Command::Start(args) => {
+            let session_name = match select_session_name_interactively(&args.sessions.sessions_dir)
+            {
+                NamePick::Use(name) => Some(name),
+                NamePick::Skipped => None,
+                NamePick::Cancelled => return Ok(()),
+            };
             let Some(model) = resolve_model(args.model.model, args.model.model_preset)? else {
                 return Ok(());
             };
@@ -253,23 +265,39 @@ pub fn execute(command: Command) -> Result<()> {
                 segmenter: segmenter_config(&args.vad),
                 inference: inference_config(&args.inference, prompt),
                 model_identity: None,
+                session_name,
+                silence_timeout: Some(Duration::from_secs(args.silence_timeout * 60)),
             })?;
             println!("{}", root.display());
             Ok(())
         }
         Command::Transcribe(args) => {
+            let session_name = match select_session_name_interactively(&args.sessions.sessions_dir)
+            {
+                NamePick::Use(name) => Some(name),
+                NamePick::Skipped => None,
+                NamePick::Cancelled => return Ok(()),
+            };
+            let input = match args.input {
+                Some(input) => input,
+                None => match select_input_path_interactively()? {
+                    InputPick::Use(path) => path,
+                    InputPick::Cancelled => return Ok(()),
+                },
+            };
             let Some(model) = resolve_model(args.model.model, args.model.model_preset)? else {
                 return Ok(());
             };
             let language = args.model.language;
             let prompt = resolve_initial_prompt(args.model.asr_prompt, &language);
             crate::transcribe::run(crate::transcribe::TranscribeOptions {
-                input: args.input,
+                input,
                 model,
                 sessions_dir: args.sessions.sessions_dir,
                 language,
                 segmenter: segmenter_config(&args.vad),
                 inference: inference_config(&args.inference, prompt),
+                session_name,
             })?;
             Ok(())
         }
@@ -500,6 +528,116 @@ fn select_model_interactively() -> ModelPick {
     }
 }
 
+/// Characters that make a session name unusable on any supported platform; the
+/// user is asked again. Space is allowed and normalized to `_` before this check.
+const SESSION_NAME_INVALID_CHARS: [char; 9] = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
+
+/// Normalize a typed session name (trim, spaces to `_`) and reject an empty
+/// result or one containing a forbidden character.
+fn clean_session_name(input: &str) -> std::result::Result<String, &'static str> {
+    let name = input.trim().replace(' ', "_");
+    if name.is_empty() {
+        return Err("inserisci un nome");
+    }
+    if name.contains(SESSION_NAME_INVALID_CHARS) {
+        return Err("i caratteri / \\ : * ? \" < > | non sono consentiti");
+    }
+    Ok(name)
+}
+
+/// Where `start` would place the session for `name` right now, for the
+/// "already exists" check. `None` when the clock cannot be read.
+fn candidate_session_directory(sessions_dir: &Path, name: &str) -> Option<PathBuf> {
+    let directory_name =
+        crate::storage::session_directory_name(crate::storage::unix_time_ms().ok()?, Some(name))
+            .ok()?;
+    Some(sessions_dir.join(directory_name))
+}
+
+/// Outcome of the interactive session-name prompt: a usable name, or skipped
+/// on a non-interactive terminal, or the user cancelled.
+enum NamePick {
+    Use(String),
+    Skipped,
+    Cancelled,
+}
+
+/// Ask for the recording's repository name, used to build the
+/// `YY-MM-DD_<name>` session directory. Asked only on an interactive terminal so
+/// non-interactive runs keep the date-only name. `q` cancels, like the model menu.
+fn select_session_name_interactively(sessions_dir: &Path) -> NamePick {
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return NamePick::Skipped;
+    }
+    loop {
+        print!("Nome della repo per la registrazione (q = annulla): ");
+        let _ = std::io::stdout().flush();
+        let mut input = String::new();
+        if std::io::stdin().read_line(&mut input).is_err() {
+            return NamePick::Skipped;
+        }
+        if input.trim().eq_ignore_ascii_case("q") {
+            println!("selezione annullata");
+            return NamePick::Cancelled;
+        }
+        let name = match clean_session_name(&input) {
+            Ok(name) => name,
+            Err(reason) => {
+                println!("nome non valido: {reason}");
+                continue;
+            }
+        };
+        if let Some(directory) = candidate_session_directory(sessions_dir, &name)
+            && directory.exists()
+        {
+            println!(
+                "esiste già una sessione \"{}\": scegli un altro nome",
+                directory.file_name().unwrap_or_default().to_string_lossy()
+            );
+            continue;
+        }
+        return NamePick::Use(name);
+    }
+}
+
+/// Outcome of the interactive input-path prompt.
+enum InputPick {
+    Use(PathBuf),
+    Cancelled,
+}
+
+/// Ask for the audio file to transcribe. Only reached when no path was passed
+/// on the command line, so a non-interactive run has no way to answer: it fails
+/// asking for the argument instead of silently hanging.
+fn select_input_path_interactively() -> Result<InputPick> {
+    if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
+        return Err(Error::InputRequired);
+    }
+    loop {
+        print!("Percorso del file audio (q = annulla): ");
+        let _ = std::io::stdout().flush();
+        let mut input = String::new();
+        if std::io::stdin().read_line(&mut input).is_err() {
+            return Err(Error::InputRequired);
+        }
+        let trimmed = input.trim();
+        if trimmed.eq_ignore_ascii_case("q") {
+            println!("selezione annullata");
+            return Ok(InputPick::Cancelled);
+        }
+        if trimmed.is_empty() {
+            println!("percorso non valido: inserisci un percorso");
+            continue;
+        }
+        let path = PathBuf::from(trimmed);
+        if !path.is_file() {
+            println!("file non trovato: {}", path.display());
+            continue;
+        }
+        return Ok(InputPick::Use(path));
+    }
+}
+
 /// Resolve the ASR model: the `--model` flag or preset, otherwise the interactive
 /// picker. `Ok(None)` means the user cancelled the picker; the command exits cleanly.
 fn resolve_model(model: Option<PathBuf>, preset: Option<ModelPreset>) -> Result<Option<PathBuf>> {
@@ -694,5 +832,72 @@ mod tests {
         };
 
         assert_eq!(args.format, ExportFormat::Vtt);
+    }
+
+    #[test]
+    fn session_name_normalizes_spaces_and_rejects_invalid_characters() {
+        assert_eq!(clean_session_name("  my repo  ").as_deref(), Ok("my_repo"));
+        assert!(clean_session_name("/etc/passwd").is_err());
+        assert!(clean_session_name("weird:name*").is_err());
+        assert!(clean_session_name("back\\slash").is_err());
+        assert!(clean_session_name("   ").is_err());
+    }
+
+    #[test]
+    fn transcribe_input_path_is_optional() {
+        let cli = Cli::try_parse_from([
+            "personal-transcriber",
+            "transcribe",
+            "input.mp3",
+            "--model",
+            "models/fixture.bin",
+        ])
+        .expect("transcribe with a path should parse");
+        let Command::Transcribe(args) = cli.command else {
+            panic!("expected transcribe command");
+        };
+        assert_eq!(args.input, Some(PathBuf::from("input.mp3")));
+
+        let cli = Cli::try_parse_from([
+            "personal-transcriber",
+            "transcribe",
+            "--model",
+            "models/fixture.bin",
+        ])
+        .expect("transcribe without a path should parse");
+        let Command::Transcribe(args) = cli.command else {
+            panic!("expected transcribe command");
+        };
+        assert_eq!(args.input, None);
+    }
+
+    #[test]
+    fn silence_timeout_defaults_to_fifteen_minutes_and_only_accepts_one_to_thirty() {
+        let cli = Cli::try_parse_from([
+            "personal-transcriber",
+            "start",
+            "--model",
+            "models/fixture.bin",
+        ])
+        .expect("start command should parse");
+        let Command::Start(args) = cli.command else {
+            panic!("expected start command");
+        };
+        assert_eq!(args.silence_timeout, 15);
+
+        let cli = Cli::try_parse_from(["personal-transcriber", "start", "--silence-timeout", "30"])
+            .expect("30 minutes should be accepted");
+        let Command::Start(args) = cli.command else {
+            panic!("expected start command");
+        };
+        assert_eq!(args.silence_timeout, 30);
+
+        for value in ["0", "31", "-1", "1.5", "abc"] {
+            assert!(
+                Cli::try_parse_from(["personal-transcriber", "start", "--silence-timeout", value])
+                    .is_err(),
+                "{value} must be rejected"
+            );
+        }
     }
 }

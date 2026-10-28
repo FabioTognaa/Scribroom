@@ -119,6 +119,7 @@ personal-transcriber start [opzioni]
 | ------------------------------ | ------------ | ------------------ | ------------------------------------ |
 | `--microphone <NOME>`          | testo        | input predefinito  | Dispositivo del microfono.           |
 | `--system-audio <NOME>`        | testo        | BlackHole rilevato | Dispositivo dell'audio di sistema.   |
+| `--silence-timeout <MINUTI>`   | intero 1–30  | `15`               | Chiude la sessione dopo N minuti di silenzio consecutivo. |
 | `--model <PERCORSO>`           | percorso     | —                  | Vedi “Modello e lingua”.             |
 | `--model-preset <NOME>`        | enum         | `small`            | Vedi “Modello e lingua”.             |
 | `--language <LINGUA>`          | `it` \| `en` | `it`               | Vedi “Modello e lingua”.             |
@@ -129,10 +130,19 @@ personal-transcriber start [opzioni]
 | `--asr-flash-attention <BOOL>` | booleano     | `true`             | Vedi “Inferenza”.                    |
 | `--sessions-dir <PERCORSO>`    | percorso     | `sessions`         | Directory in cui creare la sessione. |
 
+Su un terminale `start` chiede il nome della sessione e crea `YY-MM-DD_<nome>`:
+gli spazi diventano `_`, i caratteri `/ \ : * ? " < > |` e i nomi già usati sono
+rifiutati, `q` annulla. Senza terminale interattivo resta il nome `YY-MM-DD`.
+
+Con `--silence-timeout` la sessione si chiude da sola dopo N minuti consecutivi di
+silenzio. Il conteggio è in tempo audio e non si ferma con `pause`: la chiusura è
+la stessa di `stop` (stato `completed`) e l'evento `silence_timeout` in
+`events.jsonl` ne conserva il motivo.
+
 ### `transcribe`
 
 ```text
-personal-transcriber transcribe <FILE> [opzioni]
+personal-transcriber transcribe [FILE] [opzioni]
 ```
 
 Trascrive un file audio esistente, senza registrare e senza conservare audio: in
@@ -141,6 +151,9 @@ solo `<nome>.txt`. Non sovrascrive mai nulla, perché la cartella è nuova; se l
 trascrizione fallisce non resta niente sul disco. Elabora un solo file per
 invocazione, in un unico thread.
 
+Anche `transcribe` chiede il nome della sessione su un terminale e, se `<FILE>`
+non è passato, chiede il percorso del file audio.
+
 Su un terminale mostra una barra di avanzamento su una riga sola: la percentuale
 già trascritta sul totale, non il tempo rimanente. Con l'output rediretto non
 stampa nulla. I log di whisper.cpp/ggml vanno su standard error e compaiono solo
@@ -148,7 +161,7 @@ con `-v`.
 
 | Argomento/Opzione              | Tipo         | Default            | Descrizione                                    |
 | ------------------------------ | ------------ | ------------------ | ---------------------------------------------- |
-| `<FILE>` (argomento)           | percorso     | richiesto          | Input `.wav`, `.mp3`, `.m4a`, `.mp4` o `.aac`. |
+| `<FILE>` (argomento)           | percorso     | —                  | Input `.wav`, `.mp3`, `.m4a`, `.mp4` o `.aac`; chiesto su terminale se omesso. |
 | `--model <PERCORSO>`           | percorso     | —                  | Vedi “Modello e lingua”.                       |
 | `--model-preset <NOME>`        | enum         | `small`            | Vedi “Modello e lingua”.                       |
 | `--language <LINGUA>`          | `it` \| `en` | `it`               | Vedi “Modello e lingua”.                       |
