@@ -1,5 +1,13 @@
 PROSSIME TASK
 ------------------------------
+
+FIX CI:
+In questo momento la CI fallisce su uno dei test per qualche ragione, va risolta
+
+- capire dove sia il problema e provare a risolvere la pipeline 
+- i test falliti devono essere analizzati e sistemati se necessario 
+
+
 FIX E PICCOLI CAMBIAMENTI 
 - attualmente il comando personal-transcriber può essere avviato ovunque, ma la cartella dei modelli non viene individuata: occorrono dei path assoluti per fare in modo che le mat dei pesi vengano individuate
 - cambiare nome del comando di avvio: personal-trascriber -> scrib
@@ -43,6 +51,7 @@ A questo punto si sposerebbe bene non avere un programma da setuppare con blackh
     • occorre un nuovo comando runnabile sempre per installare/disisntallare dal proprio computer o dalla lista di modelli uno di essi
 - pensare a come e dove salvare le registrazioni
   . ogni sessione salva di default un file .txt raw text della trascrizione della sessione
+
 
 -------------------------------
 TASK PERSONALI:
