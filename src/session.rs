@@ -451,10 +451,15 @@ fn run_with_sink_internal(
             )?;
             if previous_state == SessionState::Running
                 && status.state == SessionState::TranscriptionPaused
-            {
-                segmentation_sender
+                && segmentation_sender
                     .send(SegmentationCommand::Flush)
-                    .map_err(|_| Error::SegmentationWorkerPanicked)?;
+                    .is_err()
+            {
+                // The worker already stopped; `join` below reports why.
+                segmentation_worker_ended_early = true;
+                segment_drain = false;
+                source_shutdown.store(true, Ordering::Relaxed);
+                break;
             }
             if status.state == SessionState::Stopping {
                 segment_drain = previous_state == SessionState::Running;
@@ -493,16 +498,27 @@ fn run_with_sink_internal(
                     };
                     if status.state == SessionState::Running {
                         record_eligible_range(&mut eligible_ranges, &chunk);
-                        if !segmentation_replay_required
-                            && !enqueue_for_segmentation(
+                        if !segmentation_replay_required {
+                            match enqueue_for_segmentation(
                                 &segmentation_sender,
                                 chunk.clone(),
                                 &max_segmentation_queue_depth,
-                            )?
-                        {
-                            segmentation_replay_required = true;
-                            status.segmentation_replay_required = true;
-                            status.asr_replay_required = true;
+                            ) {
+                                Ok(true) => {}
+                                Ok(false) => {
+                                    segmentation_replay_required = true;
+                                    status.segmentation_replay_required = true;
+                                    status.asr_replay_required = true;
+                                }
+                                // The worker already stopped; `join` below
+                                // reports why instead of masking it as a panic.
+                                Err(_) => {
+                                    segmentation_worker_ended_early = true;
+                                    segment_drain = false;
+                                    source_shutdown.store(true, Ordering::Relaxed);
+                                    break;
+                                }
+                            }
                         }
                     }
                     update_status_for_chunk(&mut status, &chunk);
@@ -581,16 +597,21 @@ fn run_with_sink_internal(
             };
             if segment_drain {
                 record_eligible_range(&mut eligible_ranges, &chunk);
-                if !segmentation_replay_required
-                    && !enqueue_for_segmentation(
-                        &segmentation_sender,
-                        chunk.clone(),
-                        &max_segmentation_queue_depth,
-                    )?
-                {
-                    segmentation_replay_required = true;
-                    status.segmentation_replay_required = true;
-                    status.asr_replay_required = true;
+                if !segmentation_replay_required {
+                    // A failed send means the worker already stopped; `join`
+                    // below reports the cause.
+                    if matches!(
+                        enqueue_for_segmentation(
+                            &segmentation_sender,
+                            chunk.clone(),
+                            &max_segmentation_queue_depth,
+                        ),
+                        Ok(false)
+                    ) {
+                        segmentation_replay_required = true;
+                        status.segmentation_replay_required = true;
+                        status.asr_replay_required = true;
+                    }
                 }
             }
             update_status_for_chunk(&mut status, &chunk);
@@ -598,21 +619,19 @@ fn run_with_sink_internal(
         drop(receiver);
 
         if !segmentation_worker_ended_early {
+            // A failed send means the worker already stopped, so its own error
+            // surfaces through `join` instead of being replaced by a panic.
             // When replay is required, `ShutdownDiscard` flushes and drops the
             // partial result: replay re-segments the same audio, so emitting the
             // live partial here would transcribe an overlapping range twice.
             if !segmentation_replay_required {
-                segmentation_sender
-                    .send(SegmentationCommand::Flush)
-                    .map_err(|_| Error::SegmentationWorkerPanicked)?;
+                let _ = segmentation_sender.send(SegmentationCommand::Flush);
             }
-            segmentation_sender
-                .send(if segmentation_replay_required {
-                    SegmentationCommand::ShutdownDiscard
-                } else {
-                    SegmentationCommand::ShutdownAndEmit
-                })
-                .map_err(|_| Error::SegmentationWorkerPanicked)?;
+            let _ = segmentation_sender.send(if segmentation_replay_required {
+                SegmentationCommand::ShutdownDiscard
+            } else {
+                SegmentationCommand::ShutdownAndEmit
+            });
         }
         drop(segmentation_sender);
 
